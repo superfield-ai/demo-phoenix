@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './components/Login';
-import { Settings, User } from 'lucide-react';
+import { Settings, User, Users } from 'lucide-react';
 import { MobileInstallPage } from './pages/mobile-install';
 import { SettingsPage } from './pages/settings';
+import { LeadDetailPage, LeadQueuePage } from './pages/lead-detail';
 import { usePlatform } from './hooks/use-platform';
 import { isDismissalActive, DISMISSED_KEY } from './components/pwa/install-prompt';
 
@@ -45,8 +46,12 @@ function MobileGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+type ActiveView = 'settings' | 'leads';
+
 function App() {
   const { user, logout, loading } = useAuth();
+  const [activeView, setActiveView] = useState<ActiveView>('leads');
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -60,6 +65,18 @@ function App() {
     return <Login />;
   }
 
+  function renderMain() {
+    if (activeView === 'leads') {
+      if (selectedLeadId) {
+        return (
+          <LeadDetailPage prospectId={selectedLeadId} onBack={() => setSelectedLeadId(null)} />
+        );
+      }
+      return <LeadQueuePage onSelectLead={(id) => setSelectedLeadId(id)} />;
+    }
+    return <SettingsPage />;
+  }
+
   return (
     <div className="flex h-screen w-full bg-zinc-50 font-sans overflow-hidden text-zinc-900">
       {/* Left Sidebar */}
@@ -70,7 +87,21 @@ function App() {
           </div>
 
           <div className="flex flex-col gap-4 mt-4 w-full px-2">
-            <button className="p-3 rounded-xl flex items-center justify-center transition-all bg-indigo-50 text-indigo-600">
+            <button
+              onClick={() => {
+                setActiveView('leads');
+                setSelectedLeadId(null);
+              }}
+              className={`p-3 rounded-xl flex items-center justify-center transition-all ${activeView === 'leads' ? 'bg-indigo-50 text-indigo-600' : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-700'}`}
+              title="Lead queue"
+            >
+              <Users size={20} strokeWidth={2.5} />
+            </button>
+            <button
+              onClick={() => setActiveView('settings')}
+              className={`p-3 rounded-xl flex items-center justify-center transition-all ${activeView === 'settings' ? 'bg-indigo-50 text-indigo-600' : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-700'}`}
+              title="Settings"
+            >
               <Settings size={20} strokeWidth={2.5} />
             </button>
           </div>
@@ -89,9 +120,7 @@ function App() {
       {/* Main Application Area */}
       <main className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 flex flex-col bg-white">
-          <div className="flex-1 overflow-hidden overflow-y-auto">
-            <SettingsPage />
-          </div>
+          <div className="flex-1 overflow-hidden overflow-y-auto">{renderMain()}</div>
         </div>
       </main>
     </div>
