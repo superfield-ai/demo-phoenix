@@ -32,7 +32,8 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { startPostgres, type PgContainer } from './pg-container';
-import { migrate } from './index';
+import { migrate, splitSqlStatements } from './index';
+import { configureRevenueLicycleRoles } from './init-remote';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -45,6 +46,10 @@ beforeAll(async () => {
 
   // Apply full schema (creates all baseline tables + revenue lifecycle tables).
   await migrate({ databaseUrl: pg.url });
+
+  // Provision revenue lifecycle roles and grants (requires superuser — runs on
+  // the admin connection, matching the runInitRemote production path).
+  await configureRevenueLicycleRoles(sql);
 }, 60_000);
 
 afterAll(async () => {
@@ -315,12 +320,9 @@ describe('down migration — AC-6 / TP-6', () => {
     // Apply down migration.
     const downSql = readFileSync(resolve(__dirname, 'revenue-lifecycle-down.sql'), 'utf-8');
 
-    // Strip single-line comments, then split on semicolons.
-    const statements = downSql
-      .replace(/--.*$/gm, '')
-      .split(';')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    // Use splitSqlStatements which correctly handles dollar-quoted PL/pgSQL blocks.
+    const cleanSql = downSql.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const statements = splitSqlStatements(cleanSql).filter((s) => s.length > 0);
 
     for (const stmt of statements) {
       await sql.unsafe(stmt);
