@@ -23,6 +23,7 @@
  * @see https://github.com/superfield-ai/demo-phoenix/issues/4
  */
 
+import { createHash } from 'crypto';
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import postgres from 'postgres';
 import { startPostgres, type PgContainer } from './pg-container';
@@ -30,7 +31,6 @@ import { migrate } from './index';
 import {
   createProspect,
   writeKycRecord,
-  updateProspectKycStatus,
   StubKycProvider,
   RealKycProvider,
   resolveKycProvider,
@@ -225,7 +225,6 @@ describe('TP-4: Failure result sets kyc_manual_review', () => {
    * We iterate UUIDs until we find one, seeded deterministically for speed.
    */
   function findFailProspectId(): string {
-    const { createHash } = require('crypto') as typeof import('crypto');
     // Known UUIDs pre-computed to land in fail bucket (hash[0] % 10 === 0):
     // We brute-force a few candidates inline.
     for (let i = 0; i < 1_000; i++) {
@@ -263,7 +262,6 @@ describe('TP-4: Failure result sets kyc_manual_review', () => {
     // Override StubKycProvider to use the failProspectId for hashing.
     const failProvider: KycProvider = {
       async verify(_prospectId: string) {
-        const { createHash } = await import('crypto');
         const hash = createHash('sha256').update(failProspectId, 'utf8').digest();
         return {
           verification_status: 'fail' as const,
