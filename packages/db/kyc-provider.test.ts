@@ -38,6 +38,7 @@ import {
   type KYCRecord,
 } from './kyc-provider';
 import { handleKycVerifyTask } from './kyc-worker';
+import type { TaskQueueRow } from './task-queue';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test container lifecycle
@@ -122,7 +123,7 @@ describe('TP-2: Worker handler writes KYCRecord', () => {
     );
 
     // Enqueue directly via raw insert so we control the sql client
-    const [taskRow] = await sql`
+    const [taskRow] = await sql<TaskQueueRow[]>`
       INSERT INTO task_queue (idempotency_key, agent_type, job_type, payload, created_by, status)
       VALUES (
         ${'tp2-' + prospect.id},
@@ -246,7 +247,7 @@ describe('TP-4: Failure result sets kyc_manual_review', () => {
 
     // Insert a task row in 'claimed' state using the real prospect.id in payload
     // but call verify with the failProspectId to get a fail result.
-    const [taskRow] = await sql`
+    const [taskRow] = await sql<TaskQueueRow[]>`
       INSERT INTO task_queue (idempotency_key, agent_type, job_type, payload, created_by, status)
       VALUES (
         ${'tp4-' + prospect.id},
@@ -291,7 +292,7 @@ describe('TP-4: Failure result sets kyc_manual_review', () => {
       sql,
     );
 
-    const [taskRow] = await sql`
+    const [taskRow] = await sql<TaskQueueRow[]>`
       INSERT INTO task_queue (idempotency_key, agent_type, job_type, payload, created_by, status)
       VALUES (
         ${'tp4b-' + prospect.id},
