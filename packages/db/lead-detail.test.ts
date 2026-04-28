@@ -209,9 +209,6 @@ describe('TP-1: GET lead detail includes all three sub-score rationale strings',
 
 describe('TP-2: stage change with empty note is rejected', () => {
   test('empty note returns error code NOTE_REQUIRED', async () => {
-    const repId = crypto.randomUUID();
-    const prospectId = await insertProspect(sql, { assigned_rep_id: repId });
-
     // Simulate what the server handler validates: missing note.
     const note = '';
     const isRejected = typeof note !== 'string' || note.trim().length === 0;

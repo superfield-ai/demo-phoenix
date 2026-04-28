@@ -48,7 +48,8 @@ let sql: ReturnType<typeof postgres>;
 let repACookie = '';
 let repAUserId = '';
 let repBCookie = '';
-let repBUserId = '';
+// repBUserId is used implicitly via repBCookie for cross-rep access tests
+let _repBUserId = '';
 
 beforeAll(async () => {
   pg = await startPostgres();
@@ -84,7 +85,7 @@ beforeAll(async () => {
     role: 'sales_rep',
   });
   repBCookie = sessionB.cookie;
-  repBUserId = sessionB.userId;
+  _repBUserId = sessionB.userId;
 }, 60_000);
 
 afterAll(async () => {
