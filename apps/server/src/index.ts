@@ -64,6 +64,7 @@ import { handleCampaignSummaryRequest } from './api/campaign-summary';
 import { handleComplianceRequest } from './api/compliance';
 import { handleLegalHoldRequest } from './api/legal-hold';
 import { handleLabelClearanceRequest } from './api/label-clearance';
+import { handleLeadsRequest } from './api/leads';
 
 // Starter behavior:
 // the server boot path auto-runs a local schema initializer for convenience.
@@ -485,6 +486,13 @@ export default {
     if (url.pathname.startsWith('/api/legal-holds')) {
       const legalHoldRes = await handleLegalHoldRequest(req, url, appState);
       if (legalHoldRes) return withTrace(legalHoldRes);
+    }
+
+    // GET /api/leads/queue — Sales Rep qualified lead queue (P1-1)
+    // GET /api/leads/disqualified — disqualified lead list (read-only, P1-1)
+    if (url.pathname.startsWith('/api/leads/')) {
+      const leadsRes = await handleLeadsRequest(req, url, appState);
+      if (leadsRes) return withTrace(leadsRes);
     }
 
     // Serve static assets. import.meta.dir is the compiled bundle dir (/app/dist)

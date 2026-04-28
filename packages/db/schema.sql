@@ -1727,3 +1727,17 @@ CREATE TRIGGER trg_rescore_on_industry_benchmark
 
 INSERT INTO _schema_version (migration) VALUES ('revenue-lifecycle-001')
   ON CONFLICT (migration) DO NOTHING;
+
+-- ============================================================================
+-- Lead Queue (Phase 1, P1-1): disqualification_reason column on rl_prospects
+--
+-- Adds a nullable free-text column that records why a prospect was moved to
+-- the 'disqualified' stage. Required by GET /api/leads/disqualified.
+-- Issue: https://github.com/superfield-ai/demo-phoenix/issues/7
+-- ============================================================================
+
+ALTER TABLE rl_prospects
+  ADD COLUMN IF NOT EXISTS disqualification_reason TEXT;
+
+INSERT INTO _schema_version (migration) VALUES ('lead-queue-001')
+  ON CONFLICT (migration) DO NOTHING;
