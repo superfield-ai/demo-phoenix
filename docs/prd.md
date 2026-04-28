@@ -301,11 +301,3 @@ The following are explicitly excluded from this PRD. They may be addressed in fu
 | 4   | Are there multiple jurisdictions at launch, and which FDCPA/GDPR variants apply?                             | Legal/Compliance   | Before implementation      |
 | 5   | What billing system generates invoices — integration with existing system, or native invoice generation?     | Product Owner      | Before architecture review |
 | 6   | What constitutes a health score drop — which product usage signals and weights define the health score?      | Product Owner      | Before implementation      |
-
----
-
-## 10. Revision History
-
-| Date       | Author                                        | Change                                                |
-| ---------- | --------------------------------------------- | ----------------------------------------------------- |
-| 2026-04-28 | Product Owner interview (sduvignau@gmail.com) | Initial draft from structured product owner interview |
