@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './components/Login';
-import { Settings, User, Users } from 'lucide-react';
+import { Settings, User, Users, KanbanSquare } from 'lucide-react';
 import { MobileInstallPage } from './pages/mobile-install';
 import { SettingsPage } from './pages/settings';
 import { LeadDetailPage, LeadQueuePage } from './pages/lead-detail';
+import { PipelineBoardPage } from './pages/pipeline-board';
 import { usePlatform } from './hooks/use-platform';
 import { isDismissalActive, DISMISSED_KEY } from './components/pwa/install-prompt';
+
+type ActivePage = 'pipeline' | 'leads' | 'settings';
 
 /** Returns true when the visitor is on a mobile platform (android or ios) */
 function isMobilePlatform(os: string): boolean {
@@ -46,11 +49,9 @@ function MobileGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-type ActiveView = 'settings' | 'leads';
-
 function App() {
   const { user, logout, loading } = useAuth();
-  const [activeView, setActiveView] = useState<ActiveView>('leads');
+  const [activePage, setActivePage] = useState<ActivePage>('pipeline');
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   if (loading) {
@@ -66,7 +67,10 @@ function App() {
   }
 
   function renderMain() {
-    if (activeView === 'leads') {
+    if (activePage === 'pipeline') {
+      return <PipelineBoardPage />;
+    }
+    if (activePage === 'leads') {
       if (selectedLeadId) {
         return (
           <LeadDetailPage prospectId={selectedLeadId} onBack={() => setSelectedLeadId(null)} />
@@ -88,19 +92,34 @@ function App() {
 
           <div className="flex flex-col gap-4 mt-4 w-full px-2">
             <button
+              title="Pipeline"
+              onClick={() => setActivePage('pipeline')}
+              className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                activePage === 'pipeline'
+                  ? 'bg-indigo-50 text-indigo-600'
+                  : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+              }`}
+            >
+              <KanbanSquare size={20} strokeWidth={2.5} />
+            </button>
+            <button
               onClick={() => {
-                setActiveView('leads');
+                setActivePage('leads');
                 setSelectedLeadId(null);
               }}
-              className={`p-3 rounded-xl flex items-center justify-center transition-all ${activeView === 'leads' ? 'bg-indigo-50 text-indigo-600' : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-700'}`}
+              className={`p-3 rounded-xl flex items-center justify-center transition-all ${activePage === 'leads' ? 'bg-indigo-50 text-indigo-600' : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-700'}`}
               title="Lead queue"
             >
               <Users size={20} strokeWidth={2.5} />
             </button>
             <button
-              onClick={() => setActiveView('settings')}
-              className={`p-3 rounded-xl flex items-center justify-center transition-all ${activeView === 'settings' ? 'bg-indigo-50 text-indigo-600' : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-700'}`}
               title="Settings"
+              onClick={() => setActivePage('settings')}
+              className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                activePage === 'settings'
+                  ? 'bg-indigo-50 text-indigo-600'
+                  : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+              }`}
             >
               <Settings size={20} strokeWidth={2.5} />
             </button>
