@@ -1,0 +1,50 @@
+{
+  "name": "db",
+  "private": true,
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./pg-container": "./pg-container.ts",
+    "./revocation": "./revocation.ts",
+    "./trace": "./trace.ts",
+    "./task-queue": "./task-queue.ts",
+    "./task-queue-worker": "./task-queue-worker.ts",
+    "./api-keys": "./api-keys.ts",
+    "./worker-credentials": "./worker-credentials.ts",
+    "./worker-channel": "./worker-channel.ts",
+    "./governance": "./governance.ts",
+    "./entity-type-registry": "./entity-type-registry.ts",
+    "./phase1-entity-types": "./phase1-entity-types.ts",
+    "./feature-flags": "./feature-flags.ts",
+    "./auth-lockout": "./auth-lockout.ts",
+    "./recovery": "./recovery.ts",
+    "./business-journal": "./business-journal.ts",
+    "./approvals": "./approvals.ts",
+    "./ingestion-token": "./ingestion-token.ts",
+    "./corpus-chunk-store": "./corpus-chunk-store.ts",
+    "./email-ingestion-state-machine": "./email-ingestion-state-machine.ts",
+    "./backup": "./backup.ts",
+    "./soc2-evidence": "./soc2-evidence.ts",
+    "./worker-tokens": "./worker-tokens.ts",
+    "./tenant-policies": "./tenant-policies.ts",
+    "./tenant-config": "./tenant-config.ts",
+    "./autolearn-state-machine": "./autolearn-state-machine.ts",
+    "./transcription-state-machine": "./transcription-state-machine.ts",
+    "./claim-citation-coverage": "./claim-citation-coverage.ts",
+    "./rls-context": "./rls-context.ts",
+    "./annotation-state-machine": "./annotation-state-machine.ts",
+    "./hallucination-escalation": "./hallucination-escalation.ts",
+    "./analytics-emitter": "./analytics-emitter.ts",
+    "./retention-engine": "./retention-engine.ts",
+    "./retention-scheduler": "./retention-scheduler.ts",
+    "./worm-mode": "./worm-mode.ts",
+    "./kms-backfill": "./kms-backfill.ts"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "postgres": "^3.4.8"
+  }
+}

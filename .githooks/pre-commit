@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+BRANCH=$(git branch --show-current 2>/dev/null)
+[[ "$BRANCH" == studio/session* ]] && exit 0
+
+if [[ -z "$BRANCH" ]]; then
+  echo "COMMIT BLOCKED: checkout a branch before committing." >&2
+  exit 1
+fi
+
+STAGED=$(git diff --cached --name-only)
+if [[ -z "$STAGED" ]]; then
+  exit 0
+fi
+
+JS_STAGED=$(printf '%s\n' "$STAGED" | grep -E '\.(js|mjs)$' | grep -v '\.config\.' || true)
+if [[ -n "$JS_STAGED" ]]; then
+  echo "" >&2
+  echo "COMMIT BLOCKED: JavaScript logic files are not allowed." >&2
+  echo "$JS_STAGED" >&2
+  echo "" >&2
+  exit 1
+fi
+
+FORMATTABLE_STAGED=$(printf '%s\n' "$STAGED" | grep -E '\.(cjs|css|html|json|md|mts|mjs|scss|ts|tsx|yaml|yml)$' || true)
+# Filter to only files that exist on disk (exclude deletions)
+FORMATTABLE=""
+while IFS= read -r f; do
+  [[ -n "$f" && -f "$f" ]] && FORMATTABLE="${FORMATTABLE} $f"
+done <<< "$FORMATTABLE_STAGED"
+FORMATTABLE="${FORMATTABLE# }"
+if [[ -n "$FORMATTABLE" ]]; then
+  echo "pre-commit: checking formatting on staged files..." >&2
+  # shellcheck disable=SC2086
+  bunx prettier --check $FORMATTABLE
+fi
+
+exit 0

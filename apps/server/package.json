@@ -1,0 +1,23 @@
+{
+  "name": "server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "build": "bun build src/index.ts --target=bun --outdir=dist"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.88.0",
+    "@simplewebauthn/server": "^13.3.0",
+    "ajv": "^8.18.0",
+    "core": "workspace:*",
+    "croner": "^10.0.1",
+    "db": "workspace:*",
+    "embedding": "workspace:*",
+    "rss-parser": "^3.13.0"
+  }
+}

@@ -1,0 +1,57 @@
+name: PWA Device Helpers Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/web/src/components/pwa/**'
+      - 'apps/web/src/sw.ts'
+      - 'apps/web/public/manifest.json'
+      - 'apps/web/public/sw.js'
+      - 'tests/helpers/pwa.ts'
+      - 'tests/pwa/**'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: superfield
+          POSTGRES_PASSWORD: superfield
+          POSTGRES_DB: superfield
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_SUBMODULE_PAT || secrets.GITHUB_TOKEN }}
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+      - name: Install Dependencies
+        run: bun install
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
+      - name: Run PWA tests
+        env:
+          DATABASE_URL: postgres://superfield:superfield@localhost:5432/superfield
+          AUDIT_DATABASE_URL: postgres://superfield:superfield@localhost:5432/superfield
+          ANALYTICS_DATABASE_URL: postgres://superfield:superfield@localhost:5432/superfield
+          JWT_SECRET: test-secret-for-pwa-ci
+          TEST_MODE: 'true'
+        run: bunx playwright test --config tests/pwa/playwright.config.mts
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwa-playwright-report
+          path: playwright-report

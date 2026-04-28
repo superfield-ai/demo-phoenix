@@ -1,0 +1,17 @@
+{
+  "name": "worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo 'worker: no build step'"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "core": "workspace:*",
+    "db": "workspace:*",
+    "postgres": "^3.4.8"
+  }
+}

@@ -1,0 +1,43 @@
+name: Quality gate
+
+on:
+  push:
+    branches: [main, 'UX/**', 'feat/**', 'fix/**']
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'calypso-blueprint/**'
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - 'README.md'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'calypso-blueprint/**'
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - 'README.md'
+  workflow_dispatch:
+
+concurrency:
+  group: quality-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_SUBMODULE_PAT || secrets.GITHUB_TOKEN }}
+      - uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Lint check
+        run: bun run lint
+      - name: Format check
+        run: bun run format:check
+      - name: Build verification
+        run: bun run build

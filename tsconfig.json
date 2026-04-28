@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "paths": {
+      "core": ["./packages/core/index.ts"],
+      "db": ["./packages/db/index.ts"],
+      "db/*": ["./packages/db/*.ts"],
+      "embedding": ["./packages/embedding/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "apps/web/tests/component", "apps/web/src/sw.ts"]
+}

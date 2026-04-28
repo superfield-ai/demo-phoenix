@@ -1,0 +1,16 @@
+{
+  "name": "ui",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc --noEmit && bun run build-catalog.ts",
+    "build:catalog": "bun run build-catalog.ts"
+  },
+  "dependencies": {
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0"
+  }
+}

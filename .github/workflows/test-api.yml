@@ -1,0 +1,42 @@
+name: API Integration Tests
+
+on:
+  push:
+    branches: [main, 'UX/**', 'feat/**', 'fix/**']
+    paths:
+      - 'apps/server/**'
+      - 'apps/worker/**'
+      - 'packages/**'
+      - 'tests/unit/**'
+      - 'tests/e2e/**'
+      - '.github/workflows/test-api.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/server/**'
+      - 'apps/worker/**'
+      - 'packages/**'
+      - 'tests/unit/**'
+      - 'tests/e2e/**'
+      - '.github/workflows/test-api.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_SUBMODULE_PAT || secrets.GITHUB_TOKEN }}
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+      - name: Install Dependencies
+        run: bun install
+      - name: Run API Integration Tests
+        run: |
+          if [ -f apps/server/vitest.integration.config.ts ]; then
+            bun --bun vitest run --config apps/server/vitest.integration.config.ts
+          else
+            echo "::notice::vitest.integration.config.ts not found — skipping (feature not yet landed)"
+          fi

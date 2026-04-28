@@ -1,0 +1,188 @@
+import type { AppState } from '../index';
+import type { Task, TaskProperties } from 'core';
+import { createTaskSchema, patchTaskSchema } from 'core';
+import { getCorsHeaders, getAuthenticatedUser, parseCookies } from './auth';
+import { applyTaskPatchThroughBoundary } from '../policies/task-write-service';
+import { verifyCsrfAndAudit } from '../auth/csrf';
+import { validate } from './validation';
+import { broadcast } from '../websocket';
+import { makeJson } from '../lib/response';
+
+// Starter task note:
+// Task CRUD currently mutates entity rows directly. That is acceptable for the
+// current scaffold features, but it is below the target enterprise posture for
+// consequential operations. Future state changes that carry financial,
+// approval, or agentic workflow significance should move behind a journaled
+// write boundary with dual attribution and replay support.
+
+function rowToTask(row: { id: string; properties: TaskProperties; created_at: string }): Task {
+  const p = row.properties;
+  return {
+    id: row.id,
+    name: p.name,
+    description: p.description ?? '',
+    owner: p.owner ?? '',
+    priority: p.priority ?? 'medium',
+    status: p.status ?? 'todo',
+    estimateStart: p.estimateStart ?? null,
+    estimatedDeliver: p.estimatedDeliver ?? null,
+    dependsOn: p.dependsOn ?? [],
+    tags: p.tags ?? [],
+    createdAt: row.created_at,
+  };
+}
+
+export async function handleTasksRequest(
+  req: Request,
+  url: URL,
+  appState: AppState,
+): Promise<Response | null> {
+  if (!url.pathname.startsWith('/api/tasks')) return null;
+
+  const corsHeaders = getCorsHeaders(req);
+  const { sql } = appState;
+  const json = makeJson(corsHeaders);
+
+  const user = await getAuthenticatedUser(req);
+  if (!user) return json({ error: 'Unauthorized' }, 401);
+
+  // CSRF check for state-mutating methods — emits an audit event on failure
+  const cookies = parseCookies(req.headers.get('Cookie'));
+  const csrfError = await verifyCsrfAndAudit(req, cookies, {
+    actorId: user.id,
+    path: url.pathname,
+  });
+  if (csrfError) return csrfError;
+
+  // GET /api/tasks
+  if (req.method === 'GET' && url.pathname === '/api/tasks') {
+    const rows = await sql<{ id: string; properties: TaskProperties; created_at: string }[]>`
+      SELECT id, properties, created_at
+      FROM entities
+      WHERE type = 'task'
+      ORDER BY created_at DESC
+    `;
+    return json(rows.map(rowToTask));
+  }
+
+  // POST /api/tasks
+  if (req.method === 'POST' && url.pathname === '/api/tasks') {
+    const rawBody = await req.json();
+    const result = validate<{
+      name: string;
+      description?: string;
+      owner?: string;
+      priority?: TaskProperties['priority'];
+      status?: TaskProperties['status'];
+      estimateStart?: string | null;
+      estimatedDeliver?: string | null;
+      dependsOn?: string[];
+      tags?: string[];
+    }>(createTaskSchema, rawBody);
+
+    if (!result.valid) {
+      return json(
+        {
+          error: 'Validation failed',
+          details: result.errors.map((e) => ({
+            instancePath: e.instancePath,
+            message: e.message,
+          })),
+        },
+        400,
+      );
+    }
+
+    const {
+      name,
+      description = '',
+      owner = '',
+      priority = 'medium',
+      status = 'todo',
+      estimateStart = null,
+      estimatedDeliver = null,
+      dependsOn = [],
+      tags = [],
+    } = result.data;
+
+    const id = crypto.randomUUID();
+    const properties: TaskProperties = {
+      name: name.trim(),
+      description,
+      owner,
+      priority,
+      status,
+      estimateStart,
+      estimatedDeliver,
+      dependsOn,
+      tags,
+    };
+
+    const [row] = await sql<{ id: string; properties: TaskProperties; created_at: string }[]>`
+      INSERT INTO entities (id, type, properties, tenant_id)
+      VALUES (${id}, 'task', ${sql.json(properties as never)}, null)
+      RETURNING id, properties, created_at
+    `;
+
+    const newTask = rowToTask(row);
+    broadcast('task.created', newTask);
+    return json(newTask, 201);
+  }
+
+  // PATCH /api/tasks/:id — partial update (status, etc.)
+  if (req.method === 'PATCH' && url.pathname.startsWith('/api/tasks/')) {
+    const id = url.pathname.split('/')[3];
+    const rawBody = await req.json();
+
+    const patchResult = validate<Partial<TaskProperties>>(patchTaskSchema, rawBody);
+    if (!patchResult.valid) {
+      return json(
+        {
+          error: 'Validation failed',
+          details: patchResult.errors.map((e) => ({
+            instancePath: e.instancePath,
+            message: e.message,
+          })),
+        },
+        400,
+      );
+    }
+
+    const [existing] = await sql<{ properties: TaskProperties }[]>`
+      SELECT properties FROM entities WHERE id = ${id} AND type = 'task'
+    `;
+    if (!existing) return json({ error: 'Not found' }, 404);
+
+    const row = await applyTaskPatchThroughBoundary({
+      taskId: id,
+      current: existing.properties,
+      patch: patchResult.data,
+      principal: {
+        id: user.id,
+        kind: 'human',
+      },
+      reason: 'task.patch',
+    });
+
+    const updatedTask = rowToTask(row);
+    broadcast('task.updated', updatedTask);
+    return json(updatedTask);
+  }
+
+  // DELETE /api/tasks/:id
+  if (req.method === 'DELETE' && url.pathname.startsWith('/api/tasks/')) {
+    const id = url.pathname.split('/')[3];
+
+    const deleted = await sql<{ id: string }[]>`
+      DELETE FROM entities
+      WHERE id = ${id} AND type = 'task'
+      RETURNING id
+    `;
+    if (deleted.length === 0) return json({ error: 'Not found' }, 404);
+
+    broadcast('task.deleted', { id });
+    return json({ success: true });
+  }
+
+  return null;
+}

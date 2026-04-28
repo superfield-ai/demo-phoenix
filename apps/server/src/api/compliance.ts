@@ -1,0 +1,325 @@
+/**
+ * @file api/compliance
+ *
+ * Compliance Officer API — retention policy management (issue #79),
+ * e-discovery export bundle (issue #84), and SOC 2 evidence package (issue #92).
+ *
+ * GET  /api/compliance/retention-policies
+ *   List all named retention policies in the catalogue with their entity-type
+ *   overrides. Open to any authenticated user (read-only).
+ *
+ * POST /api/compliance/tenants/:tenantId/retention-policy
+ *   Assign a named retention policy to a tenant.
+ *   Body: { policyName: string }
+ *   Auth: compliance_officer role or superuser.
+ *   Emits an audit event before the DB write (write-before-mutate invariant).
+ *
+ * POST /api/compliance/export
+ *   Trigger an e-discovery export for the given scope.
+ *   Body: { customerId: string, dateFrom?: string, dateTo?: string, entityTypes?: string[] }
+ *   Auth: compliance_officer role or superuser.
+ *   Emits an e_discovery.export audit event.
+ *   Returns the structured bundle as JSON.
+ *
+ * GET /api/compliance/soc2-evidence
+ *   Assemble and return the SOC 2 Type II evidence package for the current
+ *   attestation period.
+ *   Query params:
+ *     periodStart — ISO-8601 start of attestation period (default: 12 months ago)
+ *     periodEnd   — ISO-8601 end of attestation period (default: now)
+ *   Auth: compliance_officer role or superuser.
+ *   Returns the structured evidence package as JSON.
+ *
+ * Canonical docs: docs/PRD.md §7a, docs/implementation-plan-v1.md Phase 8
+ * Related issues: #79, #84, #92
+ */
+
+import type { AppState } from '../index';
+import { getCorsHeaders, getAuthenticatedUser, parseCookies } from './auth';
+import { isSuperuser, makeJson } from '../lib/response';
+import { emitAuditEvent } from '../policies/audit-service';
+import { verifyCsrfAndAudit } from '../auth/csrf';
+import {
+  listRetentionPolicies,
+  assignRetentionPolicyToTenant,
+  InsufficientRoleError,
+  UnknownRetentionPolicyError,
+} from 'db/retention-engine';
+import { buildEDiscoveryBundle, EDiscoveryInsufficientRoleError } from 'db/e-discovery';
+import { assembleSoc2EvidencePackage } from 'db/soc2-evidence';
+
+async function resolveActorRole(sql: AppState['sql'], userId: string): Promise<string | null> {
+  const actorRows = await sql<{ properties: { role?: string } }[]>`
+    SELECT properties
+    FROM entities
+    WHERE id = ${userId} AND type = 'user'
+    LIMIT 1
+  `;
+  return actorRows[0]?.properties?.role ?? null;
+}
+
+export async function handleComplianceRequest(
+  req: Request,
+  url: URL,
+  appState: AppState,
+): Promise<Response | null> {
+  if (!url.pathname.startsWith('/api/compliance')) return null;
+
+  const corsHeaders = getCorsHeaders(req);
+  const json = makeJson(corsHeaders);
+  const { sql } = appState;
+
+  // ---------------------------------------------------------------------------
+  // GET /api/compliance/retention-policies
+  // ---------------------------------------------------------------------------
+
+  if (req.method === 'GET' && url.pathname === '/api/compliance/retention-policies') {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return json({ error: 'Unauthorized' }, 401);
+    const actorRole = await resolveActorRole(sql, user.id);
+    if (!isSuperuser(user.id) && actorRole !== 'compliance_officer') {
+      return json({ error: 'Forbidden: compliance_officer role required' }, 403);
+    }
+
+    const policies = await listRetentionPolicies(sql);
+    return json({ policies });
+  }
+
+  // ---------------------------------------------------------------------------
+  // POST /api/compliance/tenants/:tenantId/retention-policy
+  // ---------------------------------------------------------------------------
+
+  const assignMatch = url.pathname.match(/^\/api\/compliance\/tenants\/([^/]+)\/retention-policy$/);
+  if (req.method === 'POST' && assignMatch) {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return json({ error: 'Unauthorized' }, 401);
+
+    const cookies = parseCookies(req.headers.get('Cookie'));
+    const csrfError = await verifyCsrfAndAudit(req, cookies, {
+      actorId: user.id,
+      path: url.pathname,
+    });
+    if (csrfError) return csrfError;
+
+    const tenantId = assignMatch[1];
+
+    let body: { policyName?: unknown };
+    try {
+      body = (await req.json()) as { policyName?: unknown };
+    } catch {
+      return json({ error: 'Invalid JSON body' }, 400);
+    }
+
+    if (typeof body.policyName !== 'string' || !body.policyName.trim()) {
+      return json({ error: 'policyName is required' }, 400);
+    }
+
+    const policyName = body.policyName.trim();
+
+    // Resolve the actor's role from the entities table.
+    const actorRows = await sql<{ properties: { role?: string } }[]>`
+      SELECT properties
+      FROM entities
+      WHERE id = ${user.id} AND type = 'user'
+      LIMIT 1
+    `;
+    const actorRole = actorRows[0]?.properties?.role ?? null;
+    const actorIsSuperuser = isSuperuser(user.id);
+
+    try {
+      await assignRetentionPolicyToTenant(sql, {
+        tenantId,
+        policyName,
+        actorId: user.id,
+        actorRole: actorRole ?? null,
+        isSuperuser: actorIsSuperuser,
+        auditWriter: async (event) => {
+          await emitAuditEvent(event);
+        },
+      });
+    } catch (err) {
+      if (err instanceof InsufficientRoleError) {
+        return json({ error: 'Forbidden: compliance_officer role required' }, 403);
+      }
+      if (err instanceof UnknownRetentionPolicyError) {
+        return json({ error: `Unknown policy: ${policyName}` }, 422);
+      }
+      throw err;
+    }
+
+    return json({ tenantId, policyName, assigned: true }, 200);
+  }
+
+  // ---------------------------------------------------------------------------
+  // POST /api/compliance/export
+  // ---------------------------------------------------------------------------
+
+  if (req.method === 'POST' && url.pathname === '/api/compliance/export') {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return json({ error: 'Unauthorized' }, 401);
+
+    const cookies = parseCookies(req.headers.get('Cookie'));
+    const csrfError = await verifyCsrfAndAudit(req, cookies, {
+      actorId: user.id,
+      path: url.pathname,
+    });
+    if (csrfError) return csrfError;
+
+    let body: {
+      customerId?: unknown;
+      dateFrom?: unknown;
+      dateTo?: unknown;
+      entityTypes?: unknown;
+    };
+    try {
+      body = (await req.json()) as {
+        customerId?: unknown;
+        dateFrom?: unknown;
+        dateTo?: unknown;
+        entityTypes?: unknown;
+      };
+    } catch {
+      return json({ error: 'Invalid JSON body' }, 400);
+    }
+
+    if (typeof body.customerId !== 'string' || !body.customerId.trim()) {
+      return json({ error: 'customerId is required' }, 400);
+    }
+
+    if (body.dateFrom !== undefined && typeof body.dateFrom !== 'string') {
+      return json({ error: 'dateFrom must be an ISO-8601 string' }, 400);
+    }
+
+    if (body.dateTo !== undefined && typeof body.dateTo !== 'string') {
+      return json({ error: 'dateTo must be an ISO-8601 string' }, 400);
+    }
+
+    if (
+      body.entityTypes !== undefined &&
+      (!Array.isArray(body.entityTypes) ||
+        (body.entityTypes as unknown[]).some((t) => typeof t !== 'string'))
+    ) {
+      return json({ error: 'entityTypes must be an array of strings' }, 400);
+    }
+
+    const actorRows = await sql<{ properties: { role?: string } }[]>`
+      SELECT properties
+      FROM entities
+      WHERE id = ${user.id} AND type = 'user'
+      LIMIT 1
+    `;
+    const actorRole = actorRows[0]?.properties?.role ?? null;
+    const actorIsSuperuser = isSuperuser(user.id);
+
+    const scope = {
+      customerId: (body.customerId as string).trim(),
+      dateFrom: body.dateFrom as string | undefined,
+      dateTo: body.dateTo as string | undefined,
+      entityTypes: body.entityTypes as string[] | undefined,
+    };
+
+    let bundle;
+    try {
+      bundle = await buildEDiscoveryBundle(sql, {
+        actorId: user.id,
+        actorRole,
+        isSuperuser: actorIsSuperuser,
+        scope,
+        auditSql: appState.auditSql,
+        auditWriter: async (event) => {
+          await emitAuditEvent(event);
+        },
+      });
+    } catch (err) {
+      if (err instanceof EDiscoveryInsufficientRoleError) {
+        return json({ error: 'Forbidden: compliance_officer role required' }, 403);
+      }
+      throw err;
+    }
+
+    return json(bundle, 200);
+  }
+
+  // ---------------------------------------------------------------------------
+  // GET /api/compliance/soc2-evidence
+  // ---------------------------------------------------------------------------
+
+  if (req.method === 'GET' && url.pathname === '/api/compliance/soc2-evidence') {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return json({ error: 'Unauthorized' }, 401);
+
+    const actorRole = await resolveActorRole(sql, user.id);
+    if (!isSuperuser(user.id) && actorRole !== 'compliance_officer') {
+      return json({ error: 'Forbidden: compliance_officer role required' }, 403);
+    }
+
+    // Default attestation period: last 12 months.
+    const defaultEnd = new Date();
+    const defaultStart = new Date(defaultEnd);
+    defaultStart.setFullYear(defaultStart.getFullYear() - 1);
+
+    const periodStartParam = url.searchParams.get('periodStart');
+    const periodEndParam = url.searchParams.get('periodEnd');
+
+    const attestationPeriodStart = periodStartParam ?? defaultStart.toISOString();
+    const attestationPeriodEnd = periodEndParam ?? defaultEnd.toISOString();
+
+    // Validate ISO-8601 dates if provided.
+    if (periodStartParam && isNaN(new Date(periodStartParam).getTime())) {
+      return json({ error: 'periodStart must be a valid ISO-8601 timestamp' }, 400);
+    }
+    if (periodEndParam && isNaN(new Date(periodEndParam).getTime())) {
+      return json({ error: 'periodEnd must be a valid ISO-8601 timestamp' }, 400);
+    }
+
+    const evidencePackage = await assembleSoc2EvidencePackage(sql, appState.auditSql, {
+      attestationPeriodStart,
+      attestationPeriodEnd,
+    });
+
+    return json(evidencePackage, 200);
+  }
+
+  // ---------------------------------------------------------------------------
+  // GET /api/compliance/audit
+  // ---------------------------------------------------------------------------
+
+  if (req.method === 'GET' && url.pathname === '/api/compliance/audit') {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return json({ error: 'Unauthorized' }, 401);
+
+    const actorRole = await resolveActorRole(sql, user.id);
+    if (!isSuperuser(user.id) && actorRole !== 'compliance_officer') {
+      return json({ error: 'Forbidden: compliance_officer role required' }, 403);
+    }
+
+    const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? '50') || 50, 1), 200);
+    const offset = Math.max(Number(url.searchParams.get('offset') ?? '0') || 0, 0);
+    const action = url.searchParams.get('action');
+    const actor = url.searchParams.get('actor');
+
+    const rows = await appState.auditSql<
+      {
+        id: string;
+        actor_id: string;
+        action: string;
+        entity_type: string;
+        entity_id: string;
+        before: Record<string, unknown> | null;
+        after: Record<string, unknown> | null;
+        ts: string;
+      }[]
+    >`
+      SELECT id, actor_id, action, entity_type, entity_id, before, after, ts::text AS ts
+      FROM audit_events
+      WHERE (${action}::text IS NULL OR action = ${action})
+        AND (${actor}::text IS NULL OR actor_id = ${actor})
+      ORDER BY ts DESC, id DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+
+    return json({ events: rows, limit, offset });
+  }
+
+  return null;
+}

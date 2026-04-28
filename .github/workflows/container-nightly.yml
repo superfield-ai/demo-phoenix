@@ -1,0 +1,156 @@
+name: Container Nightly Sanity
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  build-and-health-check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app_rw
+          POSTGRES_PASSWORD: app_rw_password
+          POSTGRES_DB: superfield_app
+        options: >-
+          --health-cmd "pg_isready -U app_rw -d superfield_app"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GH_SUBMODULE_PAT || secrets.GITHUB_TOKEN }}
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Build frontend
+        run: cd apps/web && bun --bun vite build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build container image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.release
+          load: true
+          push: false
+          tags: superfield-nightly:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          no-cache: true
+
+      - name: Initialize databases
+        run: bun run packages/db/init-remote.ts
+        env:
+          ADMIN_DATABASE_URL: postgres://app_rw:app_rw_password@localhost:5432/superfield_app
+          APP_RW_PASSWORD: app_rw_password
+          AUDIT_W_PASSWORD: audit_w_password
+          ANALYTICS_W_PASSWORD: analytics_w_password
+          DICT_RW_PASSWORD: dict_rw_password
+          AGENT_EMAIL_INGEST_PASSWORD: agent_email_ingest_password
+
+      - name: Start app container
+        run: |
+          docker run -d \
+            --name superfield \
+            --network host \
+            -v "$PWD/packages/db/schema.sql:/app/dist/schema.sql:ro" \
+            -e DATABASE_URL=postgres://app_rw:app_rw_password@localhost:5432/superfield_app \
+            -e AUDIT_DATABASE_URL=postgres://audit_w:audit_w_password@localhost:5432/superfield_audit \
+            -e ANALYTICS_DATABASE_URL=postgres://analytics_w:analytics_w_password@localhost:5432/superfield_analytics \
+            -e DICTIONARY_DATABASE_URL=postgres://dict_rw:dict_rw_password@localhost:5432/superfield_dictionary \
+            -e JWT_SECRET=ci-smoke-test-secret \
+            -e PORT=31415 \
+            -e RELEASE_TAG=nightly \
+            superfield-nightly:test
+
+      - name: Wait for health check
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:31415/healthz; then
+              echo ""
+              echo "Container is healthy"
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 1
+          done
+          echo "Health check timed out — container logs:"
+          docker logs superfield
+          exit 1
+
+      - name: Smoke test -- health probes
+        run: |
+          BASE=http://localhost:31415
+
+          # Liveness probe — process is running
+          LIVE=$(curl -sf "$BASE/health/live")
+          echo "Liveness response: $LIVE"
+
+          # Readiness probe — server can serve traffic
+          READY=$(curl -sf "$BASE/health/ready")
+          echo "Readiness response: $READY"
+
+          # Deep health check — all subsystems healthy
+          DEEP=$(curl -sf "$BASE/health/deep")
+          echo "Deep health response: $DEEP"
+
+          # Confirm that password-based auth endpoints correctly return 410
+          AUTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/api/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"nightly_smoke","password":"smoke-pass-123"}')
+          echo "Auth/login status (expect 410): $AUTH_STATUS"
+          if [ "$AUTH_STATUS" != "410" ]; then
+            echo "ERROR: expected 410 from removed password-auth endpoint, got $AUTH_STATUS"
+            exit 1
+          fi
+
+      - name: Stop and remove container
+        if: always()
+        run: docker rm -f superfield || true
+
+      - name: Create failure issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          LABEL="nightly-failure"
+          RUN_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+
+          # Create label if it does not exist
+          gh label create "$LABEL" --color "d93f0b" --description "Nightly container sanity failure" \
+            --repo "$REPO" 2>/dev/null || true
+
+          # Check for an existing open issue with this label
+          EXISTING=$(gh issue list --repo "$REPO" --label "$LABEL" --state open --json number --jq '.[0].number')
+
+          if [ -n "$EXISTING" ]; then
+            echo "Existing open nightly-failure issue #$EXISTING -- skipping creation"
+          else
+            gh issue create \
+              --repo "$REPO" \
+              --title "nightly: container sanity check failed" \
+              --label "$LABEL" \
+              --body "The nightly container sanity workflow failed. Failed run: ${RUN_URL} -- Check the run logs for details. Close this issue once the failure is resolved."
+          fi

@@ -1,0 +1,115 @@
+# Per-type Worker Agent Deployments and NetworkPolicies
+#
+# Blueprint: WORKER-D-007 (per-agent-type-database-role)
+# Blueprint: WORKER-P-008 (agent-type-isolation)
+# Blueprint: WORKER-A-002 (multi-agent-concurrent-replicas)
+#
+# Each agent type is a separate Kubernetes Deployment with:
+#   - Its own DB Secret (agent_<type> role credentials)
+#   - Its own vendor API key Secret
+#   - A NetworkPolicy restricting outbound to the API gateway only
+#     (no direct database access from worker pods)
+#
+# Apply order (after genesis db-init-job completes):
+#   kubectl apply -f k8s/worker-secrets.yaml   # operator-created, not committed
+#   kubectl apply -f k8s/worker-agents.yaml
+#
+# Template-only worker types (coding, analysis, code_cleanup) removed in issue #214.
+
+# ── NetworkPolicy: soc_compliance worker ─────────────────────────────────────
+# Restricts outbound traffic from soc_compliance worker pods to the API gateway
+# only. Direct database access is structurally blocked at the network layer.
+# The worker runs with read-only code access; no write capability to the DB.
+# Blueprint: WORKER-C-006 (network-policy-blocks-direct-db)
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: superfield-worker-soc-compliance-egress
+  labels:
+    app: superfield-worker-soc-compliance
+spec:
+  podSelector:
+    matchLabels:
+      app: superfield-worker-soc-compliance
+  policyTypes:
+    - Egress
+  egress:
+    # Allow outbound to API gateway (superfield-app) on port 80
+    - to:
+        - podSelector:
+            matchLabels:
+              app: superfield-app
+      ports:
+        - protocol: TCP
+          port: 80
+    # Allow DNS resolution
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+
+# ── Deployment: soc_compliance worker ────────────────────────────────────────
+# Processes soc_compliance_review tasks enqueued by the daily cron job.
+# Invokes the Claude CLI with a read-only codebase snapshot and a 5-minute
+# hard timeout. The agent_soc_compliance DB role is read-only (TQ-C-008).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: superfield-worker-soc-compliance
+  labels:
+    app: superfield-worker-soc-compliance
+    agent-type: soc_compliance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: superfield-worker-soc-compliance
+  template:
+    metadata:
+      labels:
+        app: superfield-worker-soc-compliance
+        agent-type: soc_compliance
+    spec:
+      containers:
+        - name: worker
+          # Image tag is set via deploy.sh or kubectl set image
+          image: ghcr.io/<owner>/superfield-worker-soc-compliance:latest
+          env:
+            - name: AGENT_TYPE
+              value: 'soc_compliance'
+            # DB connection uses the agent_soc_compliance role (read-only, view-scoped)
+            - name: AGENT_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: superfield-worker-soc-compliance-secret
+                  key: AGENT_DATABASE_URL
+            # API gateway base URL for task claim and result submission
+            - name: API_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: superfield-worker-soc-compliance-secret
+                  key: API_BASE_URL
+            # Claude CLI binary path (required for SOC compliance analysis)
+            - name: CLAUDE_CLI_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: superfield-worker-soc-compliance-secret
+                  key: CLAUDE_CLI_PATH
+                  optional: true
+            # Vendor API key for the Claude CLI (Claude API key)
+            - name: VENDOR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: superfield-worker-soc-compliance-secret
+                  key: VENDOR_API_KEY
+          resources:
+            requests:
+              cpu: '200m'
+              memory: '256Mi'
+            limits:
+              cpu: '1000m'
+              memory: '1Gi'
