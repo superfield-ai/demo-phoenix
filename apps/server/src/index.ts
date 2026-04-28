@@ -64,6 +64,7 @@ import { handleCampaignSummaryRequest } from './api/campaign-summary';
 import { handleComplianceRequest } from './api/compliance';
 import { handleLegalHoldRequest } from './api/legal-hold';
 import { handleLabelClearanceRequest } from './api/label-clearance';
+import { handleProspectsRequest } from './api/prospects';
 
 // Starter behavior:
 // the server boot path auto-runs a local schema initializer for convenience.
@@ -485,6 +486,21 @@ export default {
     if (url.pathname.startsWith('/api/legal-holds')) {
       const legalHoldRes = await handleLegalHoldRequest(req, url, appState);
       if (legalHoldRes) return withTrace(legalHoldRes);
+    }
+
+    // POST /api/prospects — create a Prospect and enqueue KYC_VERIFY (P0-2)
+    if (url.pathname === '/api/prospects') {
+      const prospectUser = await getAuthenticatedUser(req);
+      if (!prospectUser) {
+        return withTrace(
+          new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      const prospectRes = await handleProspectsRequest(req, prospectUser);
+      return withTrace(prospectRes);
     }
 
     // Serve static assets. import.meta.dir is the compiled bundle dir (/app/dist)

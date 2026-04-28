@@ -39,7 +39,9 @@
     "./retention-engine": "./retention-engine.ts",
     "./retention-scheduler": "./retention-scheduler.ts",
     "./worm-mode": "./worm-mode.ts",
-    "./kms-backfill": "./kms-backfill.ts"
+    "./kms-backfill": "./kms-backfill.ts",
+    "./kyc-provider": "./kyc-provider.ts",
+    "./kyc-worker": "./kyc-worker.ts"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
