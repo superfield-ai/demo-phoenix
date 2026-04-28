@@ -1780,11 +1780,6 @@ INSERT INTO _schema_version (migration) VALUES ('lead-activities-001')
   ON CONFLICT (migration) DO NOTHING;
 
 -- In-app notifications: created on new qualified lead routing and CLTV score drops.
--- event_type values:
---   new_lead   — a Prospect was routed to this rep's queue
---   score_drop — a CLTVScore re-score produced a lower composite_score
--- read_at NULL means unread; set by POST /api/notifications/:id/read.
--- prospect_id links back to the Prospect for navigation.
 CREATE TABLE IF NOT EXISTS rl_notifications (
   id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
   rep_id        TEXT NOT NULL,
@@ -1804,4 +1799,12 @@ CREATE INDEX IF NOT EXISTS idx_rl_notifications_unread
   WHERE read_at IS NULL;
 
 INSERT INTO _schema_version (migration) VALUES ('rl-notifications-001')
+  ON CONFLICT (migration) DO NOTHING;
+
+-- CFO Portfolio: company_segment column on rl_prospects
+ALTER TABLE rl_prospects
+  ADD COLUMN IF NOT EXISTS company_segment TEXT
+    CHECK (company_segment IS NULL OR company_segment IN ('SMB', 'Mid-Market', 'Enterprise'));
+
+INSERT INTO _schema_version (migration) VALUES ('cfo-portfolio-001')
   ON CONFLICT (migration) DO NOTHING;

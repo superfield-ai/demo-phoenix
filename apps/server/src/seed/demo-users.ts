@@ -5,6 +5,7 @@
  * Seeds one user per demo role that doesn't already exist:
  *   - account_manager  → "Account Manager" role
  *   - supervisor       → "Supervisor" role
+ *   - cfo              → "CFO" role (Phase 2 portfolio dashboard)
  *
  * The superuser account is seeded separately by seedSuperuser().
  * This function is a no-op when DEMO_MODE is not set.
@@ -22,6 +23,7 @@ export interface SeedDemoUsersOptions {
 const DEMO_ROLES = [
   { role: 'account_manager', username: 'demo-account-manager' },
   { role: 'supervisor', username: 'demo-supervisor' },
+  { role: 'cfo', username: 'demo-cfo' },
 ] as const;
 
 /**

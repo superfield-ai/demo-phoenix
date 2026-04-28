@@ -65,6 +65,7 @@ import { handleComplianceRequest } from './api/compliance';
 import { handleLegalHoldRequest } from './api/legal-hold';
 import { handleLeadsRequest } from './api/leads';
 import { handleNotificationsRequest } from './api/notifications';
+import { handleCfoPortfolioRequest } from './api/cfo-portfolio';
 import { handleLabelClearanceRequest } from './api/label-clearance';
 import { handleCfoRequest } from './api/cfo';
 
@@ -475,6 +476,14 @@ export default {
     ) {
       const labelRes = await handleLabelClearanceRequest(req, url, appState);
       if (labelRes) return withTrace(labelRes);
+    }
+
+    // Phase 2 CFO portfolio endpoints (issue #14).
+    // GET /api/cfo/portfolio       — per-segment CLTV aggregates
+    // GET /api/cfo/portfolio/trend — 12-month tier trend
+    if (url.pathname.startsWith('/api/cfo/')) {
+      const cfoRes = await handleCfoPortfolioRequest(req, url, appState);
+      if (cfoRes) return withTrace(cfoRes);
     }
 
     // Phase 1 lead endpoints (issues #7, #9, #10).

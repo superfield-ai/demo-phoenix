@@ -7,6 +7,7 @@ export interface User {
   isCrmAdmin?: boolean;
   isComplianceOfficer?: boolean;
   role?: string | null;
+  isCfo?: boolean;
 }
 
 interface AuthContextType {
