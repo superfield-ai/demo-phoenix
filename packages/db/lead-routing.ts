@@ -45,6 +45,7 @@ import type postgres from 'postgres';
 import { sql as defaultSql } from './index';
 import type { TaskQueueRow } from './task-queue';
 import { TaskType, TASK_TYPE_AGENT_MAP } from './task-queue';
+import { createNotification } from './notifications';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -414,6 +415,23 @@ export async function route(prospectId: string, options: RouteOptions = {}): Pro
   }
 
   await updateProspectRouting(prospectId, 'qualified', assignedRepId, null, sqlClient);
+
+  // Create a new_lead notification for the assigned rep (if one was assigned).
+  if (assignedRepId) {
+    const [prospectNameRow] = await sqlClient<{ company_name: string }[]>`
+      SELECT company_name FROM rl_prospects WHERE id = ${prospectId}
+    `;
+    const companyName = prospectNameRow?.company_name ?? 'Unknown';
+    await createNotification(
+      {
+        rep_id: assignedRepId,
+        prospect_id: prospectId,
+        event_type: 'new_lead',
+        description: `New qualified lead: ${companyName}`,
+      },
+      sqlClient,
+    );
+  }
 
   return {
     stage: 'qualified',

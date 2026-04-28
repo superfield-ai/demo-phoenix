@@ -39,6 +39,7 @@ import type postgres from 'postgres';
 import type { TaskQueueRow } from './task-queue';
 import { score, type CLTVScoreRow, type EntityType, type ScoringConfig } from './cltv-scorer';
 import { sql as defaultSql } from './index';
+import { createNotification } from './notifications';
 
 export interface RescorePayload {
   entity_id: string;
@@ -82,7 +83,47 @@ export async function handleRescoreTask(
     );
   }
 
+  // Read the previous score before re-scoring (for score-drop detection).
+  const [prevScoreRow] = await sqlClient<{ composite_score: string | null }[]>`
+    SELECT composite_score::TEXT AS composite_score
+    FROM rl_cltv_scores
+    WHERE entity_id = ${entity_id}
+      AND entity_type = ${entity_type}
+    ORDER BY computed_at DESC
+    LIMIT 1
+  `;
+  const prevScore =
+    prevScoreRow?.composite_score !== null && prevScoreRow?.composite_score !== undefined
+      ? parseFloat(prevScoreRow.composite_score)
+      : null;
+
   const cltvRow: CLTVScoreRow = await score({ entity_id, entity_type, config }, sqlClient);
+
+  // Emit a score_drop notification when the entity is a Prospect in an active
+  // pipeline (assigned_rep_id IS NOT NULL) and the new score is strictly lower.
+  if (entity_type === 'prospect' && prevScore !== null && cltvRow.composite_score < prevScore) {
+    const [prospectRow] = await sqlClient<
+      {
+        company_name: string;
+        assigned_rep_id: string | null;
+      }[]
+    >`
+      SELECT company_name, assigned_rep_id
+      FROM rl_prospects
+      WHERE id = ${entity_id}
+    `;
+    if (prospectRow?.assigned_rep_id) {
+      await createNotification(
+        {
+          rep_id: prospectRow.assigned_rep_id,
+          prospect_id: entity_id,
+          event_type: 'score_drop',
+          description: `Score dropped for ${prospectRow.company_name} (new: ${cltvRow.composite_score.toFixed(2)}, prev: ${prevScore.toFixed(2)})`,
+        },
+        sqlClient,
+      );
+    }
+  }
 
   return {
     cltvScoreId: cltvRow.id,

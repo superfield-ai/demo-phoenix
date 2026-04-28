@@ -49,6 +49,8 @@ export interface QueueLead {
   cltv_low: number | null;
   cltv_high: number | null;
   kyc_status: string | null;
+  deal_stage: string | null;
+  nudge: boolean;
   created_at: string;
 }
 
@@ -168,6 +170,15 @@ function LeadRow({ lead }: { lead: QueueLead }) {
         <p className="text-xs text-zinc-400 uppercase tracking-wide">Days</p>
         <p className="text-sm font-medium text-zinc-700">{lead.days_in_queue}</p>
       </div>
+
+      {/* Follow-up nudge — shown when deal is in Contacted stage with no recent activity */}
+      {lead.nudge && (
+        <div className="shrink-0">
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wide whitespace-nowrap">
+            Follow up?
+          </span>
+        </div>
+      )}
 
       {/* Assigned rep */}
       <div className="w-28 text-right shrink-0 hidden md:block">

@@ -64,6 +64,7 @@ import { handleCampaignSummaryRequest } from './api/campaign-summary';
 import { handleComplianceRequest } from './api/compliance';
 import { handleLegalHoldRequest } from './api/legal-hold';
 import { handleLeadsRequest } from './api/leads';
+import { handleNotificationsRequest } from './api/notifications';
 import { handleLabelClearanceRequest } from './api/label-clearance';
 
 // Starter behavior:
@@ -485,6 +486,14 @@ export default {
     if (url.pathname.startsWith('/api/leads')) {
       const leadsRes = await handleLeadsRequest(req, url, appState);
       if (leadsRes) return withTrace(leadsRes);
+    }
+
+    // Phase 1 in-app notifications (issue #11).
+    // GET  /api/notifications          — unread notifications for authenticated rep
+    // POST /api/notifications/:id/read — mark a notification as read
+    if (url.pathname.startsWith('/api/notifications')) {
+      const notifRes = await handleNotificationsRequest(req, url, appState);
+      if (notifRes) return withTrace(notifRes);
     }
 
     // Phase 8 legal hold endpoints (issue #82).
