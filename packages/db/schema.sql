@@ -1594,3 +1594,74 @@ CREATE INDEX IF NOT EXISTS idx_rl_industry_benchmarks_sic_code_date
 
 INSERT INTO _schema_version (migration) VALUES ('revenue-lifecycle-001')
   ON CONFLICT (migration) DO NOTHING;
+
+-- ============================================================================
+-- KYC (Know Your Customer) — P0-2: provider interface and deterministic stub
+--
+-- Tables:
+--
+--   prospects — a sales lead awaiting or having passed KYC verification.
+--     id:              UUID primary key.
+--     name:            Prospect display name (plaintext for demo; encrypt in prod).
+--     email:           Contact email.
+--     company:         Company name.
+--     funding_stage:   Known funding stage hint (e.g. "seed", "series_a").
+--     annual_revenue_est: Estimated annual revenue in USD cents (nullable input hint).
+--     kyc_status:      One of: pending_kyc | kyc_passed | kyc_failed | kyc_manual_review.
+--     created_by:      User ID who created this prospect.
+--     created_at / updated_at: standard audit timestamps.
+--
+--   kyc_records — the result written by the KYC worker after calling KycProvider.verify.
+--     id:                  UUID primary key.
+--     prospect_id:         FK to prospects(id).
+--     verification_status: One of: pass | fail | insufficient_data.
+--     funding_stage:       Provider-determined funding stage (nullable).
+--     annual_revenue_est:  Provider-determined revenue estimate in USD cents (nullable).
+--     debt_load_est:       Provider-determined debt load in USD cents (nullable).
+--     checked_at:          Timestamp when the provider check was performed.
+--     provider:            Which provider ran the check (e.g. "stub", "real").
+--     created_at:          Row insert timestamp.
+--
+-- Canonical docs: docs/prd.md § "KYC integration"
+-- Issue: https://github.com/superfield-ai/demo-phoenix/issues/4
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS prospects (
+  id                  TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  name                TEXT NOT NULL,
+  email               TEXT NOT NULL,
+  company             TEXT NOT NULL DEFAULT '',
+  funding_stage       TEXT,
+  annual_revenue_est  BIGINT,
+  kyc_status          TEXT NOT NULL DEFAULT 'pending_kyc'
+                        CHECK (kyc_status IN ('pending_kyc','kyc_passed','kyc_failed','kyc_manual_review')),
+  created_by          TEXT NOT NULL,
+  created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_prospects_kyc_status
+  ON prospects (kyc_status);
+CREATE INDEX IF NOT EXISTS idx_prospects_created_by
+  ON prospects (created_by);
+
+CREATE TABLE IF NOT EXISTS kyc_records (
+  id                  TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  prospect_id         TEXT NOT NULL REFERENCES prospects(id) ON DELETE CASCADE,
+  verification_status TEXT NOT NULL
+                        CHECK (verification_status IN ('pass','fail','insufficient_data')),
+  funding_stage       TEXT,
+  annual_revenue_est  BIGINT,
+  debt_load_est       BIGINT,
+  checked_at          TIMESTAMP WITH TIME ZONE NOT NULL,
+  provider            TEXT NOT NULL DEFAULT 'stub',
+  created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_kyc_records_prospect_id
+  ON kyc_records (prospect_id);
+CREATE INDEX IF NOT EXISTS idx_kyc_records_verification_status
+  ON kyc_records (verification_status);
+
+INSERT INTO _schema_version (migration) VALUES ('kyc-provider-001')
+  ON CONFLICT (migration) DO NOTHING;
