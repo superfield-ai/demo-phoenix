@@ -39,7 +39,9 @@
     "./retention-engine": "./retention-engine.ts",
     "./retention-scheduler": "./retention-scheduler.ts",
     "./worm-mode": "./worm-mode.ts",
-    "./kms-backfill": "./kms-backfill.ts"
+    "./kms-backfill": "./kms-backfill.ts",
+    "./cltv-scorer": "./cltv-scorer.ts",
+    "./cltv-rescore-worker": "./cltv-rescore-worker.ts"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
