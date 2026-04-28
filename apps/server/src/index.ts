@@ -63,8 +63,8 @@ import { handleBdmCampaignRequest } from './api/bdm-campaign';
 import { handleCampaignSummaryRequest } from './api/campaign-summary';
 import { handleComplianceRequest } from './api/compliance';
 import { handleLegalHoldRequest } from './api/legal-hold';
-import { handleLabelClearanceRequest } from './api/label-clearance';
 import { handleLeadsRequest } from './api/leads';
+import { handleLabelClearanceRequest } from './api/label-clearance';
 
 // Starter behavior:
 // the server boot path auto-runs a local schema initializer for convenience.
@@ -475,7 +475,10 @@ export default {
       if (labelRes) return withTrace(labelRes);
     }
 
-    // Phase 1 lead detail endpoints (issue #9).
+    // Phase 1 lead endpoints (issues #7, #9, #10).
+    // GET    /api/leads/queue          — score-ranked lead queue
+    // GET    /api/leads/disqualified   — disqualified lead list (read-only)
+    // GET    /api/leads/pipeline       — pipeline kanban board grouped by stage
     // GET    /api/leads/:id            — full lead detail + score + KYC + timeline
     // PATCH  /api/leads/:id/stage      — change pipeline stage (requires note)
     // POST   /api/leads/:id/activities — log a quick action
@@ -495,13 +498,6 @@ export default {
     if (url.pathname.startsWith('/api/legal-holds')) {
       const legalHoldRes = await handleLegalHoldRequest(req, url, appState);
       if (legalHoldRes) return withTrace(legalHoldRes);
-    }
-
-    // GET /api/leads/queue — Sales Rep qualified lead queue (P1-1)
-    // GET /api/leads/disqualified — disqualified lead list (read-only, P1-1)
-    if (url.pathname.startsWith('/api/leads/')) {
-      const leadsRes = await handleLeadsRequest(req, url, appState);
-      if (leadsRes) return withTrace(leadsRes);
     }
 
     // Serve static assets. import.meta.dir is the compiled bundle dir (/app/dist)

@@ -1,7 +1,8 @@
 /**
  * @file leads
  *
- * HTTP handlers for the Sales Rep lead queue and lead detail (Phase 1, P1-1).
+ * HTTP handlers for the Sales Rep lead queue, lead detail, and pipeline board
+ * (Phase 1, P1-1, issues #7, #9, #10).
  *
  * ## Endpoints
  *
@@ -24,6 +25,17 @@
  *   PATCH  /api/leads/:id/stage      — change pipeline stage (requires note, min 1 sentence)
  *   POST   /api/leads/:id/activities — log a quick action (call, email, follow_up, note)
  *
+ *   GET /api/leads/pipeline
+ *     Returns the authenticated rep's Prospects grouped by Deal.stage, each with:
+ *       - prospect_id, company_name
+ *       - tier (A/B/C/D from latest CLTVScore)
+ *       - cltv_low, cltv_high (dollar-range estimate derived from composite_score × annual_revenue_est)
+ *       - days_in_stage (days since the Deal.updated_at)
+ *       - deal_id, stage
+ *
+ *     Only Prospects whose Deal.owner_rep_id matches the authenticated user's ID
+ *     are returned — a rep cannot see cards for Prospects assigned to a different rep.
+ *
  * ## Authentication
  *
  * All endpoints require a valid session cookie. The authenticated user's ID is
@@ -38,6 +50,7 @@
  * Canonical docs: docs/prd.md §4.1
  * Issues: https://github.com/superfield-ai/demo-phoenix/issues/7
  *         https://github.com/superfield-ai/demo-phoenix/issues/9
+ *         https://github.com/superfield-ai/demo-phoenix/issues/10
  */
 
 import type postgres from 'postgres';
@@ -135,6 +148,70 @@ type QuickActionType = (typeof QUICK_ACTION_TYPES)[number];
 const DEAL_STAGES = ['contacted', 'qualified', 'proposal', 'closed_won', 'closed_lost'] as const;
 type DealStage = (typeof DEAL_STAGES)[number];
 
+// Pipeline stages in display order
+export const PIPELINE_STAGES = [
+  'contacted',
+  'qualified',
+  'proposal',
+  'closed_won',
+  'closed_lost',
+] as const;
+
+export type PipelineStage = (typeof PIPELINE_STAGES)[number];
+
+export interface PipelineCard {
+  deal_id: string;
+  prospect_id: string;
+  company_name: string;
+  stage: PipelineStage;
+  tier: string | null;
+  cltv_low: number | null;
+  cltv_high: number | null;
+  days_in_stage: number;
+}
+
+export interface PipelineResponse {
+  stages: {
+    [stage in PipelineStage]: PipelineCard[];
+  };
+}
+
+/**
+ * Derives a CLTV dollar-range estimate from the composite score (0–100) and
+ * the prospect's annual revenue estimate.
+ *
+ * The composite score is treated as a fraction of annual revenue that
+ * represents expected lifetime value (e.g. score 80 → 80% of annual revenue).
+ * A ±20% band is applied to produce the low/high range.
+ *
+ * If annual_revenue_est is null or zero the function returns null for both
+ * bounds — the UI should display a dash or "N/A" instead of $0.
+ */
+export function deriveCLTVRange(
+  compositeScore: number | null,
+  annualRevenueEst: number | null,
+): { cltv_low: number | null; cltv_high: number | null } {
+  if (compositeScore === null || annualRevenueEst === null || annualRevenueEst <= 0) {
+    return { cltv_low: null, cltv_high: null };
+  }
+  const mid = (compositeScore / 100) * annualRevenueEst;
+  return {
+    cltv_low: Math.round(mid * 0.8),
+    cltv_high: Math.round(mid * 1.2),
+  };
+}
+
+interface PipelineRow {
+  deal_id: string;
+  prospect_id: string;
+  company_name: string;
+  stage: string;
+  tier: string | null;
+  composite_score: number | null;
+  annual_revenue_est: number | null;
+  deal_updated_at: Date;
+}
+
 // ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
@@ -205,6 +282,78 @@ export async function handleLeadsRequest(
 
     const leads = await getDisqualifiedLeads(user.id, sql);
     return json({ leads });
+  }
+
+  // ── GET /api/leads/pipeline ──────────────────────────────────────────────
+  if (req.method === 'GET' && url.pathname === '/api/leads/pipeline') {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return json({ error: 'Unauthorized' }, 401);
+
+    const rows = await sql<PipelineRow[]>`
+      SELECT
+        d.id                                        AS deal_id,
+        p.id                                        AS prospect_id,
+        p.company_name,
+        d.stage,
+        cs.tier,
+        cs.composite_score::float8                  AS composite_score,
+        k.annual_revenue_est::float8                AS annual_revenue_est,
+        d.updated_at                                AS deal_updated_at
+      FROM rl_deals d
+      JOIN rl_prospects p
+        ON p.id = d.prospect_id
+      LEFT JOIN LATERAL (
+        SELECT tier, composite_score
+        FROM rl_cltv_scores
+        WHERE entity_id = p.id AND entity_type = 'prospect'
+        ORDER BY computed_at DESC
+        LIMIT 1
+      ) cs ON true
+      LEFT JOIN LATERAL (
+        SELECT annual_revenue_est
+        FROM rl_kyc_records
+        WHERE prospect_id = p.id
+          AND verification_status != 'archived'
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) k ON true
+      WHERE d.owner_rep_id = ${user.id}
+      ORDER BY d.updated_at DESC
+    `;
+
+    // Build the grouped response
+    const stages: PipelineResponse['stages'] = {
+      contacted: [],
+      qualified: [],
+      proposal: [],
+      closed_won: [],
+      closed_lost: [],
+    };
+
+    const now = Date.now();
+
+    for (const row of rows) {
+      const stage = row.stage as PipelineStage;
+      if (!(stage in stages)) continue;
+
+      const { cltv_low, cltv_high } = deriveCLTVRange(row.composite_score, row.annual_revenue_est);
+
+      const dealUpdatedMs = new Date(row.deal_updated_at).getTime();
+      const days_in_stage = Math.max(0, Math.floor((now - dealUpdatedMs) / (1000 * 60 * 60 * 24)));
+
+      stages[stage].push({
+        deal_id: row.deal_id,
+        prospect_id: row.prospect_id,
+        company_name: row.company_name,
+        stage,
+        tier: row.tier,
+        cltv_low,
+        cltv_high,
+        days_in_stage,
+      });
+    }
+
+    return json({ stages });
   }
 
   // ── GET /api/leads/:id ─────────────────────────────────────────────────────
