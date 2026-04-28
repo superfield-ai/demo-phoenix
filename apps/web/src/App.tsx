@@ -70,9 +70,7 @@ function App() {
           </div>
 
           <div className="flex flex-col gap-4 mt-4 w-full px-2">
-            <button
-              className="p-3 rounded-xl flex items-center justify-center transition-all bg-indigo-50 text-indigo-600"
-            >
+            <button className="p-3 rounded-xl flex items-center justify-center transition-all bg-indigo-50 text-indigo-600">
               <Settings size={20} strokeWidth={2.5} />
             </button>
           </div>

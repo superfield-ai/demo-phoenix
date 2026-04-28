@@ -23,12 +23,12 @@ Then open [http://localhost:5173](http://localhost:5173). Use the **Sign in as [
 
 ## Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Runtime | Bun |
-| Frontend | React + Vite (PWA) |
-| Backend | Hono (TypeScript) |
-| Database | PostgreSQL + pgvector |
-| Infra | k3d (local k8s) + Cloudflare tunnel |
-| Auth | WebAuthn / passkeys |
-| AI | Claude (Anthropic) |
+| Layer    | Technology                          |
+| -------- | ----------------------------------- |
+| Runtime  | Bun                                 |
+| Frontend | React + Vite (PWA)                  |
+| Backend  | Hono (TypeScript)                   |
+| Database | PostgreSQL + pgvector               |
+| Infra    | k3d (local k8s) + Cloudflare tunnel |
+| Auth     | WebAuthn / passkeys                 |
+| AI       | Claude (Anthropic)                  |
