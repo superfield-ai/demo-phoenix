@@ -28,7 +28,6 @@
 
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import postgres from 'postgres';
-import http from 'node:http';
 import { startPostgres, type PgContainer } from 'db/pg-container';
 import { migrate } from 'db';
 import { getCfoSummary, seedCustomer, seedInvoice, seedCollectionCase } from 'db/cfo-summary';
