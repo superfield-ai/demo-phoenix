@@ -1,7 +1,6 @@
 # Product Requirements Document — Revenue Lifecycle Intelligence Platform
 
 **Status:** Draft  
-**Owner:** Product Owner (sduvignau@gmail.com)  
 **Last updated:** 2026-04-28
 
 ---
