@@ -10,8 +10,10 @@ import { sql } from './index';
  *   ANNOTATION     — Phase 6: entity annotation agent (agent_type: annotation)
  *   DEEPCLEAN      — Phase 4: deep PII cleaning pass (agent_type: deepclean)
  *   BDM_SUMMARY    — Phase 7: BDM-ready summary generation (agent_type: bdm_summary)
+ *   RESCORE        — Phase 0: re-compute CLTVScore after MacroIndicator/IndustryBenchmark update (agent_type: rescore)
  *
  * Blueprint refs: TQ-D-001 (single-table multi-type queue), issue #95.
+ * RESCORE added in issue #5 (P0-3 versioned CLTV scoring engine).
  */
 export const TaskType = {
   EMAIL_INGEST: 'EMAIL_INGEST',
@@ -20,6 +22,7 @@ export const TaskType = {
   ANNOTATION: 'ANNOTATION',
   DEEPCLEAN: 'DEEPCLEAN',
   BDM_SUMMARY: 'BDM_SUMMARY',
+  RESCORE: 'RESCORE',
 } as const;
 
 export type TaskType = (typeof TaskType)[keyof typeof TaskType];
@@ -35,6 +38,7 @@ export const TASK_TYPE_AGENT_MAP: Record<TaskType, string> = {
   [TaskType.ANNOTATION]: 'annotation',
   [TaskType.DEEPCLEAN]: 'deepclean',
   [TaskType.BDM_SUMMARY]: 'bdm_summary',
+  [TaskType.RESCORE]: 'rescore',
 };
 
 /**

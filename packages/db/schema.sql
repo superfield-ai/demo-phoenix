@@ -1345,23 +1345,38 @@ CREATE INDEX IF NOT EXISTS idx_rl_kyc_records_verification_status
   ON rl_kyc_records (verification_status);
 
 -- CLTV scores: polymorphic — belongs to Prospect or Customer.
+-- score_version is a SHA-256 hash of the weight config; incrementing on any
+-- weight or threshold change ensures old and new records are distinguishable.
+-- Input snapshots (JSONB) capture the exact indicator values used at score time
+-- for auditability.  tier maps composite_score (0–100) → A/B/C/D via
+-- configurable thresholds.  rationale_* carry plain-English explanations of
+-- each input dimension's contribution (generated at score time).
 CREATE TABLE IF NOT EXISTS rl_cltv_scores (
-  id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
-  entity_id        TEXT NOT NULL,
-  entity_type      TEXT NOT NULL CHECK (entity_type IN ('prospect', 'customer')),
-  macro_score      NUMERIC(5, 4),
-  industry_score   NUMERIC(5, 4),
-  company_score    NUMERIC(5, 4),
-  composite_score  NUMERIC(5, 4),
-  score_version    TEXT NOT NULL,
-  computed_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  created_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+  id                        TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  entity_id                 TEXT NOT NULL,
+  entity_type               TEXT NOT NULL CHECK (entity_type IN ('prospect', 'customer')),
+  macro_score               NUMERIC(5, 4),
+  industry_score            NUMERIC(5, 4),
+  company_score             NUMERIC(5, 4),
+  composite_score           NUMERIC(7, 4),
+  tier                      TEXT CHECK (tier IN ('A', 'B', 'C', 'D')),
+  score_version             TEXT NOT NULL,
+  macro_inputs_snapshot     JSONB,
+  industry_inputs_snapshot  JSONB,
+  company_inputs_snapshot   JSONB,
+  rationale_macro           TEXT,
+  rationale_industry        TEXT,
+  rationale_company         TEXT,
+  computed_at               TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at                TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_rl_cltv_scores_entity
   ON rl_cltv_scores (entity_id, entity_type);
 CREATE INDEX IF NOT EXISTS idx_rl_cltv_scores_computed_at
   ON rl_cltv_scores (computed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rl_cltv_scores_version
+  ON rl_cltv_scores (score_version);
 
 -- Customers: converted from a Prospect on deal close.
 CREATE TABLE IF NOT EXISTS rl_customers (
@@ -1585,6 +1600,110 @@ CREATE TABLE IF NOT EXISTS rl_industry_benchmarks (
 
 CREATE INDEX IF NOT EXISTS idx_rl_industry_benchmarks_sic_code_date
   ON rl_industry_benchmarks (sic_code, effective_date DESC);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- CLTV Re-score triggers (P0-3)
+--
+-- When a MacroIndicator or IndustryBenchmark row is inserted or updated, these
+-- triggers enqueue RESCORE tasks in task_queue for every entity (Prospect or
+-- Customer) whose latest CLTVScore references the changed indicator.
+--
+-- For MacroIndicator updates: re-score all entities whose latest score snapshot
+-- contains any macro indicator row (i.e. all scored entities — macros are
+-- global signals).
+--
+-- For IndustryBenchmark updates: re-score only Prospects whose sic_code matches
+-- the updated benchmark's sic_code.
+--
+-- The task payload carries:
+--   entity_id, entity_type, trigger_id (changed row id), trigger_table
+--
+-- Idempotency key format: rescore:<entity_id>:<trigger_table>:<trigger_id>
+-- so that rapid successive updates to the same indicator produce a single
+-- queued task per entity.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION enqueue_rescore_for_macro_indicator()
+  RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  rec RECORD;
+  ikey TEXT;
+BEGIN
+  -- Enqueue a RESCORE task for every entity that has at least one CLTVScore.
+  -- Macro indicators are global signals, so all scored entities are affected.
+  FOR rec IN
+    SELECT DISTINCT entity_id, entity_type
+    FROM rl_cltv_scores
+  LOOP
+    ikey := 'rescore:' || rec.entity_id || ':rl_macro_indicators:' || NEW.id;
+    INSERT INTO task_queue
+      (idempotency_key, agent_type, job_type, payload, created_by, priority, max_attempts)
+    VALUES
+      (ikey,
+       'rescore',
+       'RESCORE',
+       jsonb_build_object(
+         'entity_id',    rec.entity_id,
+         'entity_type',  rec.entity_type,
+         'trigger_id',   NEW.id,
+         'trigger_table','rl_macro_indicators'
+       ),
+       'system',
+       5,
+       3)
+    ON CONFLICT (idempotency_key) DO NOTHING;
+  END LOOP;
+  RETURN NEW;
+END
+$$;
+
+DROP TRIGGER IF EXISTS trg_rescore_on_macro_indicator ON rl_macro_indicators;
+CREATE TRIGGER trg_rescore_on_macro_indicator
+  AFTER INSERT OR UPDATE ON rl_macro_indicators
+  FOR EACH ROW EXECUTE FUNCTION enqueue_rescore_for_macro_indicator();
+
+CREATE OR REPLACE FUNCTION enqueue_rescore_for_industry_benchmark()
+  RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  rec RECORD;
+  ikey TEXT;
+BEGIN
+  -- Enqueue a RESCORE task for every Prospect whose sic_code matches the
+  -- updated benchmark's sic_code.
+  FOR rec IN
+    SELECT DISTINCT cs.entity_id, cs.entity_type
+    FROM rl_cltv_scores cs
+    JOIN rl_prospects p
+      ON p.id = cs.entity_id
+      AND cs.entity_type = 'prospect'
+    WHERE p.sic_code = NEW.sic_code
+  LOOP
+    ikey := 'rescore:' || rec.entity_id || ':rl_industry_benchmarks:' || NEW.id;
+    INSERT INTO task_queue
+      (idempotency_key, agent_type, job_type, payload, created_by, priority, max_attempts)
+    VALUES
+      (ikey,
+       'rescore',
+       'RESCORE',
+       jsonb_build_object(
+         'entity_id',    rec.entity_id,
+         'entity_type',  rec.entity_type,
+         'trigger_id',   NEW.id,
+         'trigger_table','rl_industry_benchmarks'
+       ),
+       'system',
+       5,
+       3)
+    ON CONFLICT (idempotency_key) DO NOTHING;
+  END LOOP;
+  RETURN NEW;
+END
+$$;
+
+DROP TRIGGER IF EXISTS trg_rescore_on_industry_benchmark ON rl_industry_benchmarks;
+CREATE TRIGGER trg_rescore_on_industry_benchmark
+  AFTER INSERT OR UPDATE ON rl_industry_benchmarks
+  FOR EACH ROW EXECUTE FUNCTION enqueue_rescore_for_industry_benchmark();
 
 -- Note: PostgreSQL role definitions for the five revenue lifecycle roles
 -- (sales_rep, collections_agent, finance_controller, cfo, account_manager)
