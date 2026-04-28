@@ -403,7 +403,11 @@ interface StackedBarChartProps {
   hoveredSegment: PortfolioSegment | null;
 }
 
-function StackedBarChart({ segments, onHover, hoveredSegment }: StackedBarChartProps) {
+function StackedBarChart({
+  segments,
+  onHover,
+  hoveredSegment: _hoveredSegment,
+}: StackedBarChartProps) {
   const companySegments = ['SMB', 'Mid-Market', 'Enterprise', 'Unknown'];
   const grouped = new Map<string, Record<string, number>>();
 
