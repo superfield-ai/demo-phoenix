@@ -1778,3 +1778,30 @@ CREATE INDEX IF NOT EXISTS idx_rl_activities_type
 
 INSERT INTO _schema_version (migration) VALUES ('lead-activities-001')
   ON CONFLICT (migration) DO NOTHING;
+
+-- In-app notifications: created on new qualified lead routing and CLTV score drops.
+-- event_type values:
+--   new_lead   — a Prospect was routed to this rep's queue
+--   score_drop — a CLTVScore re-score produced a lower composite_score
+-- read_at NULL means unread; set by POST /api/notifications/:id/read.
+-- prospect_id links back to the Prospect for navigation.
+CREATE TABLE IF NOT EXISTS rl_notifications (
+  id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  rep_id        TEXT NOT NULL,
+  prospect_id   TEXT NOT NULL REFERENCES rl_prospects (id) ON DELETE CASCADE,
+  event_type    TEXT NOT NULL CHECK (event_type IN ('new_lead', 'score_drop')),
+  description   TEXT NOT NULL,
+  read_at       TIMESTAMP WITH TIME ZONE,
+  created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_notifications_rep_id
+  ON rl_notifications (rep_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rl_notifications_prospect_id
+  ON rl_notifications (prospect_id);
+CREATE INDEX IF NOT EXISTS idx_rl_notifications_unread
+  ON rl_notifications (rep_id)
+  WHERE read_at IS NULL;
+
+INSERT INTO _schema_version (migration) VALUES ('rl-notifications-001')
+  ON CONFLICT (migration) DO NOTHING;

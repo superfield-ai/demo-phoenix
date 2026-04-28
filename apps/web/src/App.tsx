@@ -8,6 +8,7 @@ import { LeadDetailPage, LeadQueuePage } from './pages/lead-detail';
 import { PipelineBoardPage } from './pages/pipeline-board';
 import { usePlatform } from './hooks/use-platform';
 import { isDismissalActive, DISMISSED_KEY } from './components/pwa/install-prompt';
+import { NotificationBell } from './components/NotificationBell';
 
 type ActivePage = 'pipeline' | 'leads' | 'settings';
 
@@ -112,6 +113,12 @@ function App() {
             >
               <Users size={20} strokeWidth={2.5} />
             </button>
+            <NotificationBell
+              onSelectLead={(prospectId) => {
+                setActivePage('leads');
+                setSelectedLeadId(prospectId);
+              }}
+            />
             <button
               title="Settings"
               onClick={() => setActivePage('settings')}

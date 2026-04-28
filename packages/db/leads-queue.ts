@@ -78,7 +78,16 @@ export interface QueueLeadRow {
   cltv_high: number | null;
   /** KYC verification status from the most-recent active rl_kyc_records row. */
   kyc_status: KycVerificationStatus | null;
+  /** Most-recent Deal stage for this prospect (null when no Deal exists). */
+  deal_stage: string | null;
+  /** Timestamp of the most-recent activity for this prospect (null when none). */
+  last_activity_at: Date | null;
   created_at: Date;
+  /**
+   * Follow-up nudge: true when deal_stage = 'contacted' AND days since
+   * last_activity_at > NUDGE_DAYS_THRESHOLD.  Computed by the API layer.
+   */
+  nudge: boolean;
 }
 
 /** A single row in the disqualified lead list. */
@@ -128,6 +137,7 @@ export async function getQueueLeads(
   sort: LeadQueueSort = 'score',
   filters: LeadQueueFilters = {},
   sqlClient: postgres.Sql = defaultSql,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<QueueLeadRow[]> {
   // Build the ORDER BY clause from the sort parameter.
   // All three sort modes fall back to composite_score DESC as a tiebreaker.
@@ -175,6 +185,8 @@ export async function getQueueLeads(
     days_in_queue: string;
     composite_score: string | null;
     kyc_status: KycVerificationStatus | null;
+    deal_stage: string | null;
+    last_activity_at: Date | null;
     created_at: Date;
   };
 
@@ -195,6 +207,20 @@ export async function getQueueLeads(
       WHERE verification_status != 'archived'
       ORDER BY prospect_id, created_at DESC
     ),
+    latest_deal AS (
+      SELECT DISTINCT ON (prospect_id)
+        prospect_id,
+        stage AS deal_stage
+      FROM rl_deals
+      ORDER BY prospect_id, created_at DESC
+    ),
+    latest_activity AS (
+      SELECT DISTINCT ON (prospect_id)
+        prospect_id,
+        occurred_at AS last_activity_at
+      FROM rl_activities
+      ORDER BY prospect_id, occurred_at DESC
+    ),
     base AS (
       SELECT
         p.id,
@@ -206,6 +232,8 @@ export async function getQueueLeads(
         FLOOR(EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 86400)::INTEGER AS days_in_queue,
         s.composite_score,
         k.kyc_status,
+        ld.deal_stage,
+        la.last_activity_at,
         CASE
           WHEN s.composite_score >= 0.7 THEN 'A'
           WHEN s.composite_score >= 0.4 THEN 'B'
@@ -215,8 +243,10 @@ export async function getQueueLeads(
         ROUND((s.composite_score * 0.8 * 1000000)::NUMERIC, 0)::BIGINT AS cltv_low,
         ROUND((s.composite_score * 1.2 * 1000000)::NUMERIC, 0)::BIGINT AS cltv_high
       FROM rl_prospects p
-      LEFT JOIN scored s ON s.entity_id = p.id
-      LEFT JOIN kyc    k ON k.prospect_id = p.id
+      LEFT JOIN scored        s  ON s.entity_id = p.id
+      LEFT JOIN kyc           k  ON k.prospect_id = p.id
+      LEFT JOIN latest_deal   ld ON ld.prospect_id = p.id
+      LEFT JOIN latest_activity la ON la.prospect_id = p.id
       WHERE p.stage = 'qualified'
         AND p.assigned_rep_id = ${repId}
         ${industryFilter}
@@ -231,8 +261,19 @@ export async function getQueueLeads(
     ${orderBy}
   `) as RawRow[];
 
+  const nudgeDays = resolveNudgeDaysThreshold(env);
+
   return rows.map((r: RawRow) => {
     const score = r.composite_score !== null ? parseFloat(r.composite_score) : null;
+
+    // Compute nudge: deal in contacted stage AND last activity older than threshold.
+    let nudge = false;
+    if (r.deal_stage === 'contacted') {
+      const refTime = r.last_activity_at ? r.last_activity_at.getTime() : r.created_at.getTime();
+      const daysSince = (Date.now() - refTime) / (1000 * 60 * 60 * 24);
+      nudge = daysSince > nudgeDays;
+    }
+
     return {
       id: r.id,
       company_name: r.company_name,
@@ -245,9 +286,28 @@ export async function getQueueLeads(
       cltv_low: score !== null ? Math.round(score * 0.8 * 1_000_000) : null,
       cltv_high: score !== null ? Math.round(score * 1.2 * 1_000_000) : null,
       kyc_status: r.kyc_status,
+      deal_stage: r.deal_stage,
+      last_activity_at: r.last_activity_at,
       created_at: r.created_at,
+      nudge,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Config helper: nudge threshold
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the nudge threshold from the environment.
+ *
+ * Reads NUDGE_DAYS_THRESHOLD; defaults to 7 if missing or unparseable.
+ */
+export function resolveNudgeDaysThreshold(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.NUDGE_DAYS_THRESHOLD;
+  if (!raw) return 7;
+  const parsed = parseInt(raw, 10);
+  return isNaN(parsed) || parsed < 0 ? 7 : parsed;
 }
 
 // ---------------------------------------------------------------------------
