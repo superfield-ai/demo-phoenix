@@ -1741,3 +1741,40 @@ ALTER TABLE rl_prospects
 
 INSERT INTO _schema_version (migration) VALUES ('lead-queue-001')
   ON CONFLICT (migration) DO NOTHING;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Lead activities: timeline entries for stage changes, notes, KYC events,
+-- score updates, and quick-action logs (P1-1, issue #9).
+--
+-- activity_type values:
+--   stage_change  — rep moved the deal stage (note required)
+--   note          — free-text note from a rep
+--   kyc_event     — KYC record status change
+--   score_update  — new CLTVScore computed
+--   call          — quick-action: logged call
+--   email         — quick-action: email sent
+--   follow_up     — quick-action: follow-up scheduled
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS rl_activities (
+  id             TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  prospect_id    TEXT NOT NULL REFERENCES rl_prospects (id) ON DELETE CASCADE,
+  activity_type  TEXT NOT NULL
+                   CHECK (activity_type IN (
+                     'stage_change', 'note', 'kyc_event', 'score_update',
+                     'call', 'email', 'follow_up'
+                   )),
+  actor_id       TEXT,
+  note           TEXT,
+  metadata       JSONB,
+  occurred_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_activities_prospect_id
+  ON rl_activities (prospect_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rl_activities_type
+  ON rl_activities (activity_type);
+
+INSERT INTO _schema_version (migration) VALUES ('lead-activities-001')
+  ON CONFLICT (migration) DO NOTHING;

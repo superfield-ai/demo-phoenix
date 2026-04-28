@@ -475,6 +475,15 @@ export default {
       if (labelRes) return withTrace(labelRes);
     }
 
+    // Phase 1 lead detail endpoints (issue #9).
+    // GET    /api/leads/:id            — full lead detail + score + KYC + timeline
+    // PATCH  /api/leads/:id/stage      — change pipeline stage (requires note)
+    // POST   /api/leads/:id/activities — log a quick action
+    if (url.pathname.startsWith('/api/leads')) {
+      const leadsRes = await handleLeadsRequest(req, url, appState);
+      if (leadsRes) return withTrace(leadsRes);
+    }
+
     // Phase 8 legal hold endpoints (issue #82).
     // POST /api/legal-holds — place a hold (compliance_officer only)
     // GET  /api/legal-holds — list holds
