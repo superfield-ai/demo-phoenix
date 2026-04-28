@@ -426,14 +426,13 @@ export async function score(
   };
 
   // ── 2. Fetch SIC code for the entity ──────────────────────────────────────
-  let sicCode: string | null = null;
-
-  if (entity_type === 'prospect') {
-    const rows = await sqlClient<ProspectSicRow[]>`
-      SELECT sic_code FROM rl_prospects WHERE id = ${entity_id} LIMIT 1
-    `;
-    sicCode = rows[0]?.sic_code ?? null;
-  } else {
+  const sicCode: string | null = await (async () => {
+    if (entity_type === 'prospect') {
+      const rows = await sqlClient<ProspectSicRow[]>`
+        SELECT sic_code FROM rl_prospects WHERE id = ${entity_id} LIMIT 1
+      `;
+      return rows[0]?.sic_code ?? null;
+    }
     // For customers, follow the prospect FK.
     const rows = await sqlClient<ProspectSicRow[]>`
       SELECT p.sic_code
@@ -442,23 +441,21 @@ export async function score(
       WHERE c.id = ${entity_id}
       LIMIT 1
     `;
-    sicCode = rows[0]?.sic_code ?? null;
-  }
+    return rows[0]?.sic_code ?? null;
+  })();
 
   // ── 3. Fetch industry benchmark ────────────────────────────────────────────
-  let industryRow: IndustryBenchmarkRow | null = null;
-  if (sicCode) {
-    const rows = await sqlClient<IndustryBenchmarkRow[]>`
-      SELECT id, sic_code, growth_rate::float8 AS growth_rate,
-             default_rate::float8 AS default_rate,
-             payment_norm_days, effective_date::text AS effective_date
-      FROM rl_industry_benchmarks
-      WHERE sic_code = ${sicCode}
-      ORDER BY effective_date DESC, created_at DESC
-      LIMIT 1
-    `;
-    industryRow = rows[0] ?? null;
-  }
+  const industryRow: IndustryBenchmarkRow | null = sicCode
+    ? await sqlClient<IndustryBenchmarkRow[]>`
+        SELECT id, sic_code, growth_rate::float8 AS growth_rate,
+               default_rate::float8 AS default_rate,
+               payment_norm_days, effective_date::text AS effective_date
+        FROM rl_industry_benchmarks
+        WHERE sic_code = ${sicCode}
+        ORDER BY effective_date DESC, created_at DESC
+        LIMIT 1
+      `.then((rows) => rows[0] ?? null)
+    : null;
 
   const industrySnapshot: IndustrySnapshot = {
     sic_code: sicCode,
@@ -471,22 +468,21 @@ export async function score(
   //
   // For prospects, read from rl_kyc_records (the revenue lifecycle table).
   // For customers, follow the prospect FK to get their KYC record.
-  let kycRow: KycRecordRow | null = null;
-
-  if (entity_type === 'prospect') {
-    const rows = await sqlClient<KycRecordRow[]>`
-      SELECT id,
-             annual_revenue_est::float8 AS annual_revenue_est,
-             debt_load_est::float8 AS debt_load_est,
-             funding_stage
-      FROM rl_kyc_records
-      WHERE prospect_id = ${entity_id}
-        AND verification_status != 'archived'
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
-    kycRow = rows[0] ?? null;
-  } else {
+  const kycRow: KycRecordRow | null = await (async () => {
+    if (entity_type === 'prospect') {
+      const rows = await sqlClient<KycRecordRow[]>`
+        SELECT id,
+               annual_revenue_est::float8 AS annual_revenue_est,
+               debt_load_est::float8 AS debt_load_est,
+               funding_stage
+        FROM rl_kyc_records
+        WHERE prospect_id = ${entity_id}
+          AND verification_status != 'archived'
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      return rows[0] ?? null;
+    }
     const rows = await sqlClient<KycRecordRow[]>`
       SELECT k.id,
              k.annual_revenue_est::float8 AS annual_revenue_est,
@@ -500,8 +496,8 @@ export async function score(
       ORDER BY k.created_at DESC
       LIMIT 1
     `;
-    kycRow = rows[0] ?? null;
-  }
+    return rows[0] ?? null;
+  })();
 
   const companySnapshot: CompanySnapshot = {
     annual_revenue_est: kycRow?.annual_revenue_est ?? null,
