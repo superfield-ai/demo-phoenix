@@ -1586,92 +1586,11 @@ CREATE TABLE IF NOT EXISTS rl_industry_benchmarks (
 CREATE INDEX IF NOT EXISTS idx_rl_industry_benchmarks_sic_code_date
   ON rl_industry_benchmarks (sic_code, effective_date DESC);
 
--- ============================================================================
--- PostgreSQL role definitions for the five named application roles.
--- Each role is created only if it does not already exist, then granted
--- table-level permissions matching their PRD-defined access scope.
--- ============================================================================
-
--- sales_rep: read prospects (qualified only), read CLTV scores, read deals.
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sales_rep') THEN
-    CREATE ROLE sales_rep NOLOGIN;
-  END IF;
-END;
-$$;
-
-GRANT SELECT ON rl_prospects TO sales_rep;
-GRANT SELECT ON rl_cltv_scores TO sales_rep;
-GRANT SELECT ON rl_deals TO sales_rep;
-GRANT SELECT ON rl_kyc_records TO sales_rep;
-
--- collections_agent: read/write collection cases, payment plans, payments, dunning.
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'collections_agent') THEN
-    CREATE ROLE collections_agent NOLOGIN;
-  END IF;
-END;
-$$;
-
-GRANT SELECT, INSERT, UPDATE ON rl_collection_cases TO collections_agent;
-GRANT SELECT, INSERT, UPDATE ON rl_payment_plans TO collections_agent;
-GRANT SELECT ON rl_payments TO collections_agent;
-GRANT SELECT, INSERT ON rl_dunning_actions TO collections_agent;
-GRANT SELECT ON rl_invoices TO collections_agent;
-GRANT SELECT ON rl_customers TO collections_agent;
-
--- finance_controller: read all AR tables; approve write-offs (update invoices/cases).
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'finance_controller') THEN
-    CREATE ROLE finance_controller NOLOGIN;
-  END IF;
-END;
-$$;
-
-GRANT SELECT ON rl_invoices TO finance_controller;
-GRANT SELECT ON rl_payments TO finance_controller;
-GRANT SELECT ON rl_collection_cases TO finance_controller;
-GRANT SELECT ON rl_payment_plans TO finance_controller;
-GRANT SELECT ON rl_dunning_actions TO finance_controller;
-GRANT SELECT ON rl_customers TO finance_controller;
-GRANT UPDATE (status, issued_at, updated_at) ON rl_invoices TO finance_controller;
-GRANT UPDATE (status, resolution_type, resolved_at, updated_at) ON rl_collection_cases TO finance_controller;
-
--- cfo: read-only access to all revenue lifecycle tables plus macro/benchmark data.
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cfo') THEN
-    CREATE ROLE cfo NOLOGIN;
-  END IF;
-END;
-$$;
-
-GRANT SELECT ON rl_prospects TO cfo;
-GRANT SELECT ON rl_cltv_scores TO cfo;
-GRANT SELECT ON rl_customers TO cfo;
-GRANT SELECT ON rl_deals TO cfo;
-GRANT SELECT ON rl_invoices TO cfo;
-GRANT SELECT ON rl_payments TO cfo;
-GRANT SELECT ON rl_collection_cases TO cfo;
-GRANT SELECT ON rl_macro_indicators TO cfo;
-GRANT SELECT ON rl_industry_benchmarks TO cfo;
-
--- account_manager: read/write customer health; manage interventions; no collection tasks.
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'account_manager') THEN
-    CREATE ROLE account_manager NOLOGIN;
-  END IF;
-END;
-$$;
-
-GRANT SELECT, UPDATE (health_score, account_manager_id, updated_at) ON rl_customers TO account_manager;
-GRANT SELECT, INSERT, UPDATE ON rl_interventions TO account_manager;
-GRANT SELECT ON rl_invoices TO account_manager;
-GRANT SELECT ON rl_cltv_scores TO account_manager;
+-- Note: PostgreSQL role definitions for the five revenue lifecycle roles
+-- (sales_rep, collections_agent, finance_controller, cfo, account_manager)
+-- are provisioned by init-remote.ts (configureRevenueLicycleRoles) which runs
+-- as a superuser connection. Role creation requires CREATEROLE privilege and
+-- cannot run as app_rw.
 
 INSERT INTO _schema_version (migration) VALUES ('revenue-lifecycle-001')
   ON CONFLICT (migration) DO NOTHING;
