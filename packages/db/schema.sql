@@ -1261,3 +1261,336 @@ CREATE INDEX IF NOT EXISTS idx_labeled_ground_truth_tenant_id
 
 INSERT INTO _schema_version (migration) VALUES ('label-clearance-001')
   ON CONFLICT (migration) DO NOTHING;
+
+-- ============================================================================
+-- Phase 0 — Revenue lifecycle entity schema (issue #3)
+--
+-- Creates all 13 revenue lifecycle entity tables required by PRD Section 5.
+-- Enforces:
+--   - Invoice status ordered transitions via CHECK constraint
+--   - At most one active KYCRecord per Prospect (unique partial index)
+--   - At most one open CollectionCase per Invoice (unique partial index)
+--   - PostgreSQL role definitions for the five named application roles
+--
+-- Canonical docs: docs/prd.md §5 Data Model
+-- ============================================================================
+
+-- Invoice status enum: ordered lifecycle states.
+-- Transitions must be strictly ordered:
+--   draft → sent → (partial_paid | overdue) → in_collection → (paid | settled | written_off)
+-- The check constraint below is enforced on INSERT/UPDATE via a BEFORE trigger
+-- (see trg_invoice_status_transition below).  The column itself still has a
+-- simple CHECK for valid values so that direct INSERT with an invalid token is
+-- also rejected.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'invoice_status') THEN
+    CREATE TYPE invoice_status AS ENUM (
+      'draft',
+      'sent',
+      'partial_paid',
+      'overdue',
+      'in_collection',
+      'paid',
+      'settled',
+      'written_off'
+    );
+  END IF;
+END;
+$$;
+
+-- Prospects: incoming lead records before KYC/scoring.
+CREATE TABLE IF NOT EXISTS rl_prospects (
+  id                TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  company_name      TEXT NOT NULL,
+  industry          TEXT,
+  sic_code          TEXT,
+  stage             TEXT NOT NULL DEFAULT 'new'
+                      CHECK (stage IN ('new', 'kyc_pending', 'kyc_manual_review', 'scored', 'qualified', 'disqualified')),
+  assigned_rep_id   TEXT,
+  disqualified_at   TIMESTAMP WITH TIME ZONE,
+  created_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_prospects_stage
+  ON rl_prospects (stage);
+CREATE INDEX IF NOT EXISTS idx_rl_prospects_assigned_rep_id
+  ON rl_prospects (assigned_rep_id);
+
+-- KYC records: one per verification attempt per prospect.
+-- At most one ACTIVE record per prospect is enforced by a unique partial index.
+CREATE TABLE IF NOT EXISTS rl_kyc_records (
+  id                     TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  prospect_id            TEXT NOT NULL REFERENCES rl_prospects (id) ON DELETE CASCADE,
+  verification_status    TEXT NOT NULL DEFAULT 'pending'
+                           CHECK (verification_status IN ('pending', 'verified', 'failed', 'archived')),
+  credit_score           INTEGER,
+  funding_stage          TEXT,
+  annual_revenue_est     NUMERIC(18, 2),
+  debt_load_est          NUMERIC(18, 2),
+  checked_at             TIMESTAMP WITH TIME ZONE,
+  created_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Unique partial index: at most one active (non-archived) KYC record per prospect.
+CREATE UNIQUE INDEX IF NOT EXISTS rl_kyc_records_one_active_per_prospect
+  ON rl_kyc_records (prospect_id)
+  WHERE verification_status != 'archived';
+
+CREATE INDEX IF NOT EXISTS idx_rl_kyc_records_prospect_id
+  ON rl_kyc_records (prospect_id);
+CREATE INDEX IF NOT EXISTS idx_rl_kyc_records_verification_status
+  ON rl_kyc_records (verification_status);
+
+-- CLTV scores: polymorphic — belongs to Prospect or Customer.
+CREATE TABLE IF NOT EXISTS rl_cltv_scores (
+  id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  entity_id        TEXT NOT NULL,
+  entity_type      TEXT NOT NULL CHECK (entity_type IN ('prospect', 'customer')),
+  macro_score      NUMERIC(5, 4),
+  industry_score   NUMERIC(5, 4),
+  company_score    NUMERIC(5, 4),
+  composite_score  NUMERIC(5, 4),
+  score_version    TEXT NOT NULL,
+  computed_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_cltv_scores_entity
+  ON rl_cltv_scores (entity_id, entity_type);
+CREATE INDEX IF NOT EXISTS idx_rl_cltv_scores_computed_at
+  ON rl_cltv_scores (computed_at DESC);
+
+-- Customers: converted from a Prospect on deal close.
+CREATE TABLE IF NOT EXISTS rl_customers (
+  id                 TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  prospect_id        TEXT REFERENCES rl_prospects (id),
+  company_name       TEXT NOT NULL,
+  segment            TEXT,
+  health_score       NUMERIC(5, 4),
+  account_manager_id TEXT,
+  created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_customers_prospect_id
+  ON rl_customers (prospect_id);
+CREATE INDEX IF NOT EXISTS idx_rl_customers_account_manager_id
+  ON rl_customers (account_manager_id);
+
+-- Deals: sales pipeline records linked to a Prospect.
+CREATE TABLE IF NOT EXISTS rl_deals (
+  id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  prospect_id   TEXT NOT NULL REFERENCES rl_prospects (id) ON DELETE CASCADE,
+  stage         TEXT NOT NULL DEFAULT 'contacted'
+                  CHECK (stage IN ('contacted', 'qualified', 'proposal', 'closed_won', 'closed_lost')),
+  value         NUMERIC(18, 2),
+  currency      TEXT NOT NULL DEFAULT 'USD',
+  close_date    DATE,
+  owner_rep_id  TEXT,
+  created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_deals_prospect_id
+  ON rl_deals (prospect_id);
+CREATE INDEX IF NOT EXISTS idx_rl_deals_stage
+  ON rl_deals (stage);
+
+-- Invoices: billing records issued to customers.
+-- Status transitions are strictly ordered; a BEFORE trigger enforces the
+-- allowed transition graph (see trg_invoice_status_transition below).
+CREATE TABLE IF NOT EXISTS rl_invoices (
+  id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  customer_id TEXT NOT NULL REFERENCES rl_customers (id) ON DELETE CASCADE,
+  amount      NUMERIC(18, 2) NOT NULL,
+  currency    TEXT NOT NULL DEFAULT 'USD',
+  due_date    DATE,
+  status      invoice_status NOT NULL DEFAULT 'draft',
+  issued_at   TIMESTAMP WITH TIME ZONE,
+  created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_invoices_customer_id
+  ON rl_invoices (customer_id);
+CREATE INDEX IF NOT EXISTS idx_rl_invoices_status
+  ON rl_invoices (status);
+CREATE INDEX IF NOT EXISTS idx_rl_invoices_due_date
+  ON rl_invoices (due_date);
+
+-- Enforce strictly ordered invoice status transitions.
+-- Allowed transitions:
+--   draft        → sent
+--   sent         → partial_paid | overdue
+--   partial_paid → overdue | in_collection
+--   overdue      → in_collection
+--   in_collection → paid | settled | written_off
+-- Terminal states (paid, settled, written_off) accept no further transitions.
+-- On INSERT (OLD is NULL) any initial status is accepted.
+CREATE OR REPLACE FUNCTION guard_invoice_status_transition()
+  RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  -- On INSERT, any initial status is valid.
+  IF TG_OP = 'INSERT' THEN
+    RETURN NEW;
+  END IF;
+
+  -- No-op transitions are always allowed.
+  IF OLD.status = NEW.status THEN
+    RETURN NEW;
+  END IF;
+
+  -- Validate the transition.
+  IF NOT (
+    (OLD.status = 'draft'         AND NEW.status IN ('sent'))                           OR
+    (OLD.status = 'sent'          AND NEW.status IN ('partial_paid', 'overdue'))        OR
+    (OLD.status = 'partial_paid'  AND NEW.status IN ('overdue', 'in_collection'))       OR
+    (OLD.status = 'overdue'       AND NEW.status IN ('in_collection'))                  OR
+    (OLD.status = 'in_collection' AND NEW.status IN ('paid', 'settled', 'written_off'))
+  ) THEN
+    RAISE EXCEPTION
+      'invalid invoice status transition: % → % (invoice id=%)',
+      OLD.status, NEW.status, OLD.id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END
+$$;
+
+DROP TRIGGER IF EXISTS trg_invoice_status_transition ON rl_invoices;
+CREATE TRIGGER trg_invoice_status_transition
+  BEFORE INSERT OR UPDATE ON rl_invoices
+  FOR EACH ROW EXECUTE FUNCTION guard_invoice_status_transition();
+
+-- Payments: individual payment events recorded against an invoice.
+CREATE TABLE IF NOT EXISTS rl_payments (
+  id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  invoice_id    TEXT NOT NULL REFERENCES rl_invoices (id) ON DELETE CASCADE,
+  amount        NUMERIC(18, 2) NOT NULL,
+  method        TEXT,
+  received_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  recorded_by   TEXT,
+  created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_payments_invoice_id
+  ON rl_payments (invoice_id);
+
+-- Dunning actions: automated and manual communications sent during the dunning sequence.
+CREATE TABLE IF NOT EXISTS rl_dunning_actions (
+  id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  invoice_id    TEXT NOT NULL REFERENCES rl_invoices (id) ON DELETE CASCADE,
+  action_type   TEXT NOT NULL,
+  scheduled_at  TIMESTAMP WITH TIME ZONE,
+  sent_at       TIMESTAMP WITH TIME ZONE,
+  response      TEXT,
+  created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_dunning_actions_invoice_id
+  ON rl_dunning_actions (invoice_id);
+
+-- Collection cases: opened automatically when an invoice reaches in_collection status.
+-- At most one OPEN case per invoice is enforced by a unique partial index.
+CREATE TABLE IF NOT EXISTS rl_collection_cases (
+  id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  invoice_id       TEXT NOT NULL REFERENCES rl_invoices (id) ON DELETE CASCADE,
+  agent_id         TEXT,
+  status           TEXT NOT NULL DEFAULT 'open'
+                     CHECK (status IN ('open', 'resolved', 'escalated', 'written_off')),
+  escalation_level INTEGER NOT NULL DEFAULT 0,
+  resolution_type  TEXT CHECK (resolution_type IN ('paid', 'payment_plan', 'settlement', 'written_off', 'legal')),
+  opened_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at      TIMESTAMP WITH TIME ZONE,
+  created_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Unique partial index: at most one open collection case per invoice.
+CREATE UNIQUE INDEX IF NOT EXISTS rl_collection_cases_one_open_per_invoice
+  ON rl_collection_cases (invoice_id)
+  WHERE status = 'open';
+
+CREATE INDEX IF NOT EXISTS idx_rl_collection_cases_invoice_id
+  ON rl_collection_cases (invoice_id);
+CREATE INDEX IF NOT EXISTS idx_rl_collection_cases_agent_id
+  ON rl_collection_cases (agent_id);
+CREATE INDEX IF NOT EXISTS idx_rl_collection_cases_status
+  ON rl_collection_cases (status);
+
+-- Payment plans: installment arrangements configured by a Collections Agent.
+CREATE TABLE IF NOT EXISTS rl_payment_plans (
+  id                  TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  collection_case_id  TEXT NOT NULL REFERENCES rl_collection_cases (id) ON DELETE CASCADE,
+  total_amount        NUMERIC(18, 2) NOT NULL,
+  installment_count   INTEGER NOT NULL CHECK (installment_count >= 1),
+  installment_amount  NUMERIC(18, 2) NOT NULL,
+  next_due_date       DATE,
+  status              TEXT NOT NULL DEFAULT 'current'
+                        CHECK (status IN ('current', 'breached', 'completed', 'cancelled')),
+  created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_payment_plans_collection_case_id
+  ON rl_payment_plans (collection_case_id);
+
+-- Interventions: Account Manager–initiated actions for at-risk customers.
+CREATE TABLE IF NOT EXISTS rl_interventions (
+  id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  customer_id  TEXT NOT NULL REFERENCES rl_customers (id) ON DELETE CASCADE,
+  trigger_type TEXT NOT NULL,
+  playbook     TEXT,
+  assigned_to  TEXT,
+  status       TEXT NOT NULL DEFAULT 'open'
+                 CHECK (status IN ('open', 'in_progress', 'resolved', 'escalated')),
+  outcome      TEXT,
+  created_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at  TIMESTAMP WITH TIME ZONE,
+  updated_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_interventions_customer_id
+  ON rl_interventions (customer_id);
+CREATE INDEX IF NOT EXISTS idx_rl_interventions_status
+  ON rl_interventions (status);
+
+-- Macro indicators: external economic signals used in CLTV computation.
+CREATE TABLE IF NOT EXISTS rl_macro_indicators (
+  id             TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  indicator_type TEXT NOT NULL,
+  value          NUMERIC NOT NULL,
+  effective_date DATE NOT NULL,
+  source         TEXT,
+  created_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_macro_indicators_type_date
+  ON rl_macro_indicators (indicator_type, effective_date DESC);
+
+-- Industry benchmarks: sector-level default and growth rates for CLTV computation.
+CREATE TABLE IF NOT EXISTS rl_industry_benchmarks (
+  id                  TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  sic_code            TEXT NOT NULL,
+  growth_rate         NUMERIC(6, 4),
+  default_rate        NUMERIC(6, 4),
+  payment_norm_days   INTEGER,
+  effective_date      DATE NOT NULL,
+  created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_industry_benchmarks_sic_code_date
+  ON rl_industry_benchmarks (sic_code, effective_date DESC);
+
+-- Note: PostgreSQL role definitions for the five revenue lifecycle roles
+-- (sales_rep, collections_agent, finance_controller, cfo, account_manager)
+-- are provisioned by init-remote.ts (configureRevenueLicycleRoles) which runs
+-- as a superuser connection. Role creation requires CREATEROLE privilege and
+-- cannot run as app_rw.
+
+INSERT INTO _schema_version (migration) VALUES ('revenue-lifecycle-001')
+  ON CONFLICT (migration) DO NOTHING;

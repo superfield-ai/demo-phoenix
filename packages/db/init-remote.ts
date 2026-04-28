@@ -735,6 +735,106 @@ CREATE POLICY ${quoteIdentifier(`${tableName}_compliance_block`)}
   }
 }
 
+/**
+ * Revenue lifecycle role names provisioned by configureRevenueLicycleRoles.
+ * These are NOLOGIN group roles that encapsulate table-level access for each
+ * PRD-defined business persona. They must be created by a superuser connection
+ * and cannot be provisioned inside schema.sql (which runs as app_rw).
+ *
+ * Canonical docs: docs/prd.md §2 User Roles, issue #3
+ */
+export const REVENUE_LIFECYCLE_ROLES = [
+  'sales_rep',
+  'collections_agent',
+  'finance_controller',
+  'cfo',
+  'account_manager',
+] as const;
+export type RevenueLicycleRole = (typeof REVENUE_LIFECYCLE_ROLES)[number];
+
+/**
+ * Provision the five PRD revenue lifecycle roles and their table-level grants.
+ *
+ * Roles are created as NOLOGIN group roles — they are granted to application
+ * service accounts that need the corresponding access scope. Each role receives
+ * the minimum set of privileges required for its PRD job.
+ *
+ * Called from runInitRemote after migrateAppSchema so the revenue lifecycle
+ * tables exist before the GRANTs are applied. Exported for use in integration
+ * tests that need to provision roles on an ephemeral pg-container.
+ */
+export async function configureRevenueLicycleRoles(
+  appAdmin: ReturnType<typeof makePool>,
+): Promise<void> {
+  for (const role of REVENUE_LIFECYCLE_ROLES) {
+    await appAdmin.unsafe(`
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN
+    CREATE ROLE ${quoteIdentifier(role)} NOLOGIN;
+  END IF;
+END
+$$;
+`);
+  }
+
+  // sales_rep: read prospects, cltv scores, deals, kyc records.
+  await appAdmin.unsafe(`
+GRANT USAGE ON SCHEMA public TO sales_rep;
+GRANT SELECT ON rl_prospects TO sales_rep;
+GRANT SELECT ON rl_cltv_scores TO sales_rep;
+GRANT SELECT ON rl_deals TO sales_rep;
+GRANT SELECT ON rl_kyc_records TO sales_rep;
+`);
+
+  // collections_agent: read/write collection lifecycle tables; read-only on invoices and customers.
+  await appAdmin.unsafe(`
+GRANT USAGE ON SCHEMA public TO collections_agent;
+GRANT SELECT, INSERT, UPDATE ON rl_collection_cases TO collections_agent;
+GRANT SELECT, INSERT, UPDATE ON rl_payment_plans TO collections_agent;
+GRANT SELECT ON rl_payments TO collections_agent;
+GRANT SELECT, INSERT ON rl_dunning_actions TO collections_agent;
+GRANT SELECT ON rl_invoices TO collections_agent;
+GRANT SELECT ON rl_customers TO collections_agent;
+`);
+
+  // finance_controller: read all AR tables; limited write for write-off approvals.
+  await appAdmin.unsafe(`
+GRANT USAGE ON SCHEMA public TO finance_controller;
+GRANT SELECT ON rl_invoices TO finance_controller;
+GRANT SELECT ON rl_payments TO finance_controller;
+GRANT SELECT ON rl_collection_cases TO finance_controller;
+GRANT SELECT ON rl_payment_plans TO finance_controller;
+GRANT SELECT ON rl_dunning_actions TO finance_controller;
+GRANT SELECT ON rl_customers TO finance_controller;
+GRANT UPDATE (status, issued_at, updated_at) ON rl_invoices TO finance_controller;
+GRANT UPDATE (status, resolution_type, resolved_at, updated_at) ON rl_collection_cases TO finance_controller;
+`);
+
+  // cfo: read-only across all revenue lifecycle and macro/benchmark tables.
+  await appAdmin.unsafe(`
+GRANT USAGE ON SCHEMA public TO cfo;
+GRANT SELECT ON rl_prospects TO cfo;
+GRANT SELECT ON rl_cltv_scores TO cfo;
+GRANT SELECT ON rl_customers TO cfo;
+GRANT SELECT ON rl_deals TO cfo;
+GRANT SELECT ON rl_invoices TO cfo;
+GRANT SELECT ON rl_payments TO cfo;
+GRANT SELECT ON rl_collection_cases TO cfo;
+GRANT SELECT ON rl_macro_indicators TO cfo;
+GRANT SELECT ON rl_industry_benchmarks TO cfo;
+`);
+
+  // account_manager: read/write customer health and interventions; no collection duties.
+  await appAdmin.unsafe(`
+GRANT USAGE ON SCHEMA public TO account_manager;
+GRANT SELECT, UPDATE (health_score, account_manager_id, updated_at) ON rl_customers TO account_manager;
+GRANT SELECT, INSERT, UPDATE ON rl_interventions TO account_manager;
+GRANT SELECT ON rl_invoices TO account_manager;
+GRANT SELECT ON rl_cltv_scores TO account_manager;
+`);
+}
+
 async function verifyRole(
   admin: ReturnType<typeof makePool>,
   roleName: string,
@@ -1160,6 +1260,7 @@ REVOKE UPDATE, DELETE ON TABLE business_journal FROM ${quoteIdentifier(ROLE_NAME
     await configureCustomerScopedRls(appAdmin);
     await configureBdmRls(appAdmin);
     await configureComplianceOfficerRole(appAdmin, auditAdmin);
+    await configureRevenueLicycleRoles(appAdmin!);
 
     await verifyInitRemote(admin, appAdmin, auditAdmin, analyticsAdmin, dictAdmin, config);
 
