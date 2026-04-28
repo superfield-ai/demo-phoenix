@@ -1301,17 +1301,31 @@ $$;
 
 -- Prospects: incoming lead records before KYC/scoring.
 CREATE TABLE IF NOT EXISTS rl_prospects (
-  id                TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
-  company_name      TEXT NOT NULL,
-  industry          TEXT,
-  sic_code          TEXT,
-  stage             TEXT NOT NULL DEFAULT 'new'
-                      CHECK (stage IN ('new', 'kyc_pending', 'kyc_manual_review', 'scored', 'qualified', 'disqualified')),
-  assigned_rep_id   TEXT,
-  disqualified_at   TIMESTAMP WITH TIME ZONE,
-  created_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+  id                       TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  company_name             TEXT NOT NULL,
+  industry                 TEXT,
+  sic_code                 TEXT,
+  stage                    TEXT NOT NULL DEFAULT 'new'
+                             CHECK (stage IN ('new', 'kyc_pending', 'kyc_manual_review', 'scored', 'qualified', 'disqualified')),
+  assigned_rep_id          TEXT,
+  disqualification_reason  TEXT
+                             CHECK (disqualification_reason IS NULL OR disqualification_reason IN ('score_below_threshold', 'kyc_not_verified', 'kyc_manual_review')),
+  disqualified_at          TIMESTAMP WITH TIME ZONE,
+  created_at               TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at               TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Idempotently add disqualification_reason column if running against an existing schema.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'rl_prospects' AND column_name = 'disqualification_reason'
+  ) THEN
+    ALTER TABLE rl_prospects
+      ADD COLUMN disqualification_reason TEXT
+        CHECK (disqualification_reason IS NULL OR disqualification_reason IN ('score_below_threshold', 'kyc_not_verified', 'kyc_manual_review'));
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_rl_prospects_stage
   ON rl_prospects (stage);
