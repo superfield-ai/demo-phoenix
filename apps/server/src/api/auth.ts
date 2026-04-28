@@ -173,6 +173,7 @@ export async function handleAuthRequest(
           isSuperadmin: access.isSuperadmin,
           isCrmAdmin: access.isCrmAdmin,
           isComplianceOfficer: access.isComplianceOfficer,
+          role: access.role,
         },
       }),
       {

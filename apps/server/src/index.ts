@@ -66,6 +66,7 @@ import { handleLegalHoldRequest } from './api/legal-hold';
 import { handleLeadsRequest } from './api/leads';
 import { handleNotificationsRequest } from './api/notifications';
 import { handleLabelClearanceRequest } from './api/label-clearance';
+import { handleCfoRequest } from './api/cfo';
 
 // Starter behavior:
 // the server boot path auto-runs a local schema initializer for convenience.
@@ -494,6 +495,13 @@ export default {
     if (url.pathname.startsWith('/api/notifications')) {
       const notifRes = await handleNotificationsRequest(req, url, appState);
       if (notifRes) return withTrace(notifRes);
+    }
+
+    // Phase 2 CFO dashboard — executive summary bar (issue #12).
+    // GET /api/cfo/summary — five portfolio metrics (cfo / finance_controller only)
+    if (url.pathname.startsWith('/api/cfo')) {
+      const cfoRes = await handleCfoRequest(req, url, appState);
+      if (cfoRes) return withTrace(cfoRes);
     }
 
     // Phase 8 legal hold endpoints (issue #82).
