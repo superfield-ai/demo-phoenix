@@ -4,16 +4,18 @@ import { sql } from './index';
  * TaskType enum — canonical job types for the kb-demo worker pipeline.
  *
  * Each variant corresponds to a distinct worker phase:
- *   EMAIL_INGEST   — Phase 2: pull emails into the KB (agent_type: email_ingest)
- *   AUTOLEARN      — Phase 3: autolearning from ingested content (agent_type: autolearn)
- *   TRANSCRIPTION  — Phase 5: audio/video transcription (agent_type: transcription)
- *   ANNOTATION     — Phase 6: entity annotation agent (agent_type: annotation)
- *   DEEPCLEAN      — Phase 4: deep PII cleaning pass (agent_type: deepclean)
- *   BDM_SUMMARY    — Phase 7: BDM-ready summary generation (agent_type: bdm_summary)
- *   KYC_VERIFY     — Phase 0: KYC verification for a newly created Prospect (agent_type: kyc_verify)
+ *   EMAIL_INGEST      — Phase 2: pull emails into the KB (agent_type: email_ingest)
+ *   AUTOLEARN         — Phase 3: autolearning from ingested content (agent_type: autolearn)
+ *   TRANSCRIPTION     — Phase 5: audio/video transcription (agent_type: transcription)
+ *   ANNOTATION        — Phase 6: entity annotation agent (agent_type: annotation)
+ *   DEEPCLEAN         — Phase 4: deep PII cleaning pass (agent_type: deepclean)
+ *   BDM_SUMMARY       — Phase 7: BDM-ready summary generation (agent_type: bdm_summary)
+ *   KYC_VERIFY        — Phase 0: KYC verification for a newly created Prospect (agent_type: kyc_verify)
+ *   RESCORE_SCHEDULE  — Phase 0: re-evaluate routing for a disqualified Prospect (agent_type: rescore_schedule)
  *
  * Blueprint refs: TQ-D-001 (single-table multi-type queue), issue #95.
  * KYC_VERIFY added in issue #4 (P0-2 KYC provider interface).
+ * RESCORE_SCHEDULE added in issue #6 (P0-4 lead qualification routing).
  */
 export const TaskType = {
   EMAIL_INGEST: 'EMAIL_INGEST',
@@ -23,6 +25,7 @@ export const TaskType = {
   DEEPCLEAN: 'DEEPCLEAN',
   BDM_SUMMARY: 'BDM_SUMMARY',
   KYC_VERIFY: 'KYC_VERIFY',
+  RESCORE_SCHEDULE: 'RESCORE_SCHEDULE',
 } as const;
 
 export type TaskType = (typeof TaskType)[keyof typeof TaskType];
@@ -39,6 +42,7 @@ export const TASK_TYPE_AGENT_MAP: Record<TaskType, string> = {
   [TaskType.DEEPCLEAN]: 'deepclean',
   [TaskType.BDM_SUMMARY]: 'bdm_summary',
   [TaskType.KYC_VERIFY]: 'kyc_verify',
+  [TaskType.RESCORE_SCHEDULE]: 'rescore_schedule',
 };
 
 /**
