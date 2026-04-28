@@ -41,7 +41,8 @@
     "./worm-mode": "./worm-mode.ts",
     "./kms-backfill": "./kms-backfill.ts",
     "./cltv-scorer": "./cltv-scorer.ts",
-    "./cltv-rescore-worker": "./cltv-rescore-worker.ts"
+    "./cltv-rescore-worker": "./cltv-rescore-worker.ts",
+    "./leads-queue": "./leads-queue.ts"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
