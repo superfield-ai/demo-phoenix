@@ -68,6 +68,7 @@ import { handleNotificationsRequest } from './api/notifications';
 import { handleCfoPortfolioRequest } from './api/cfo-portfolio';
 import { handleLabelClearanceRequest } from './api/label-clearance';
 import { handleCfoRequest } from './api/cfo';
+import { handleCfoCollectionsRequest } from './api/cfo-collections';
 
 // Starter behavior:
 // the server boot path auto-runs a local schema initializer for convenience.
@@ -476,6 +477,13 @@ export default {
     ) {
       const labelRes = await handleLabelClearanceRequest(req, url, appState);
       if (labelRes) return withTrace(labelRes);
+    }
+
+    // Phase 2 CFO collections performance panel (issue #17).
+    // GET /api/cfo/collections-performance — agent recovery rates, write-off stats, payment plan success
+    if (url.pathname === '/api/cfo/collections-performance') {
+      const collectionsRes = await handleCfoCollectionsRequest(req, url, appState);
+      if (collectionsRes) return withTrace(collectionsRes);
     }
 
     // Phase 2 CFO portfolio endpoints (issue #14).
