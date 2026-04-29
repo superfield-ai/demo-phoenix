@@ -32,6 +32,9 @@ import {
   WalkthroughModal,
   SALES_REP_STEPS,
   CFO_STEPS,
+  COLLECTIONS_AGENT_STEPS,
+  ACCOUNT_MANAGER_STEPS,
+  FINANCE_CONTROLLER_STEPS,
   resetOnboarding,
 } from './components/WalkthroughModal';
 
@@ -91,6 +94,9 @@ function MobileGate({ children }: { children: React.ReactNode }) {
 function getWalkthroughSteps(role: string | null | undefined, isCfo: boolean | undefined) {
   if (isCfo || role === 'cfo') return CFO_STEPS;
   if (role === 'sales_rep') return SALES_REP_STEPS;
+  if (role === 'collections_agent') return COLLECTIONS_AGENT_STEPS;
+  if (role === 'account_manager') return ACCOUNT_MANAGER_STEPS;
+  if (role === 'finance_controller') return FINANCE_CONTROLLER_STEPS;
   return null;
 }
 

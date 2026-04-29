@@ -6,6 +6,9 @@
  * Renders a three-step modal walkthrough anchored to the user's role:
  *   - sales_rep: lead queue → tier badge + score rationale → stage selector
  *   - cfo: executive summary bar → scenario modeler → export button
+ *   - collections_agent: case queue → contact log → payment plan panel
+ *   - account_manager: customer health dashboard → health alert → intervention form
+ *   - finance_controller: AR aging → invoice drilldown → write-off approvals
  *
  * Dismissible at any step. On dismiss or completion, calls
  * PATCH /api/users/me/onboarding to set onboarding_completed=true so the
@@ -19,53 +22,20 @@ import React from 'react';
 import { X, ChevronRight } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
-// Step type
+// Step type and role-specific step definitions
+// Re-exported from the pure-data module so callers only need one import.
 // ---------------------------------------------------------------------------
 
-export interface WalkthroughStep {
-  title: string;
-  description: string;
-}
+export type { WalkthroughStep } from './walkthrough-steps';
+export {
+  SALES_REP_STEPS,
+  CFO_STEPS,
+  COLLECTIONS_AGENT_STEPS,
+  ACCOUNT_MANAGER_STEPS,
+  FINANCE_CONTROLLER_STEPS,
+} from './walkthrough-steps';
 
-// ---------------------------------------------------------------------------
-// Role-specific step definitions
-// ---------------------------------------------------------------------------
-
-export const SALES_REP_STEPS: WalkthroughStep[] = [
-  {
-    title: 'Lead Queue',
-    description:
-      'Your lead queue lists all active prospects ranked by their composite score. Higher-scored leads convert at a greater rate — always prioritise from the top.',
-  },
-  {
-    title: 'Tier Badge & Score Rationale',
-    description:
-      'Each lead carries a tier badge (A / B / C) derived from its CLTV estimate. Click the badge or score to open the score rationale panel, which explains the main factors driving the rank.',
-  },
-  {
-    title: 'Stage Selector & Required Notes',
-    description:
-      'Use the stage selector pin in the lead detail view to progress a deal through the pipeline. Each stage transition requires a note so your team keeps full context.',
-  },
-];
-
-export const CFO_STEPS: WalkthroughStep[] = [
-  {
-    title: 'Executive Summary Bar',
-    description:
-      'The summary bar at the top of the CFO dashboard shows five live portfolio metrics: pipeline by tier, weighted close rate, AR aging, collection recovery rate, and active score model version.',
-  },
-  {
-    title: 'Scenario Modeler',
-    description:
-      'Use the scenario modeler sliders to stress-test your portfolio under different macro conditions — interest rate changes and GDP growth scenarios — and see CLTV estimates recomputed instantly.',
-  },
-  {
-    title: 'Export Button',
-    description:
-      'Click Export to download a CSV of the current portfolio view, including any active scenario overrides. Useful for offline analysis or board presentations.',
-  },
-];
+import type { WalkthroughStep } from './walkthrough-steps';
 
 // ---------------------------------------------------------------------------
 // API helper
