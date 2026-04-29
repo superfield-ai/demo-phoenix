@@ -86,6 +86,24 @@ export const ACCOUNT_MANAGER_STEPS: WalkthroughStep[] = [
   },
 ];
 
+export const BDM_STEPS: WalkthroughStep[] = [
+  {
+    title: 'Campaign Analysis',
+    description:
+      'The Campaign Analysis page gives you a view of anonymised corpus chunks across your asset manager and fund entities. Use the entity picker tabs to switch between asset managers and funds, then select an entity to explore the associated data chunks.',
+  },
+  {
+    title: 'Entity Picker',
+    description:
+      'Switch between the Asset Manager and Fund tabs to filter the entity list. Selecting an entity loads its anonymised corpus chunks — no customer identifiers are exposed, only chunk metadata like token count and index.',
+  },
+  {
+    title: 'Chunk Results',
+    description:
+      'Each chunk result shows the relevant segment of anonymised content for the selected entity. Use these results to understand the data landscape before launching outreach campaigns.',
+  },
+];
+
 export const FINANCE_CONTROLLER_STEPS: WalkthroughStep[] = [
   {
     title: 'AR Aging Dashboard',

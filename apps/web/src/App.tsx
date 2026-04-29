@@ -12,6 +12,7 @@ import {
   Briefcase,
   ShieldCheck,
   Activity,
+  BarChart2,
 } from 'lucide-react';
 import { MobileInstallPage } from './pages/mobile-install';
 import { SettingsPage } from './pages/settings';
@@ -25,7 +26,10 @@ import { CollectionQueuePage } from './pages/collection-queue';
 import { CollectionCaseDetailPage } from './pages/collection-case-detail';
 import { KycManualReviewPage } from './pages/kyc-manual-review';
 import { AccountManagerDashboardPage } from './pages/account-manager-dashboard';
+import { CampaignAnalysisPage } from './pages/campaign-analysis';
 import { usePlatform } from './hooks/use-platform';
+import { deriveDefaultPage } from './lib/default-page';
+import type { ActivePage } from './lib/default-page';
 import { isDismissalActive, DISMISSED_KEY } from './components/pwa/install-prompt';
 import { NotificationBell } from './components/NotificationBell';
 import {
@@ -35,19 +39,9 @@ import {
   COLLECTIONS_AGENT_STEPS,
   ACCOUNT_MANAGER_STEPS,
   FINANCE_CONTROLLER_STEPS,
+  BDM_STEPS,
   resetOnboarding,
 } from './components/WalkthroughModal';
-
-type ActivePage =
-  | 'pipeline'
-  | 'leads'
-  | 'settings'
-  | 'cfo-portfolio'
-  | 'cfo-dashboard'
-  | 'wiki'
-  | 'collection-queue'
-  | 'kyc-review'
-  | 'account-manager-dashboard';
 
 /** Returns true when the visitor is on a mobile platform (android or ios) */
 function isMobilePlatform(os: string): boolean {
@@ -91,8 +85,13 @@ function MobileGate({ children }: { children: React.ReactNode }) {
  * Determine walkthrough steps for the authenticated user's role.
  * Returns null if no walkthrough applies to the role.
  */
-function getWalkthroughSteps(role: string | null | undefined, isCfo: boolean | undefined) {
+function getWalkthroughSteps(
+  role: string | null | undefined,
+  isCfo: boolean | undefined,
+  isBdm: boolean | undefined,
+) {
   if (isCfo || role === 'cfo') return CFO_STEPS;
+  if (isBdm || role === 'bdm') return BDM_STEPS;
   if (role === 'sales_rep') return SALES_REP_STEPS;
   if (role === 'collections_agent') return COLLECTIONS_AGENT_STEPS;
   if (role === 'account_manager') return ACCOUNT_MANAGER_STEPS;
@@ -123,8 +122,7 @@ function useIsMobileViewport(): boolean {
 function App() {
   const { user, logout, loading } = useAuth();
   const isMobileViewport = useIsMobileViewport();
-  const defaultPage: ActivePage =
-    user?.role === 'account_manager' ? 'account-manager-dashboard' : 'pipeline';
+  const defaultPage: ActivePage = deriveDefaultPage(user?.role, user?.isCfo, user?.isBdm);
   const [activePage, setActivePage] = useState<ActivePage>(defaultPage);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
@@ -135,7 +133,7 @@ function App() {
     if (!user) return;
     // Show if onboarding is not yet completed
     if (user.onboarding_completed === false) {
-      const steps = getWalkthroughSteps(user.role, user.isCfo);
+      const steps = getWalkthroughSteps(user.role, user.isCfo, user.isBdm);
       if (steps) setShowWalkthrough(true);
     }
   }, [user]);
@@ -158,7 +156,7 @@ function App() {
     return <Login />;
   }
 
-  const walkthroughSteps = getWalkthroughSteps(user.role, user.isCfo);
+  const walkthroughSteps = getWalkthroughSteps(user.role, user.isCfo, user.isBdm);
 
   function renderMain() {
     if (activePage === 'pipeline') {
@@ -197,6 +195,9 @@ function App() {
     }
     if (activePage === 'account-manager-dashboard') {
       return <AccountManagerDashboardPage />;
+    }
+    if (activePage === 'campaign-analysis') {
+      return <CampaignAnalysisPage />;
     }
     return <SettingsPage />;
   }
@@ -284,6 +285,20 @@ function App() {
                 }`}
               >
                 <Activity size={20} strokeWidth={2.5} />
+              </button>
+            )}
+            {(user?.isBdm || user?.isSuperadmin) && (
+              <button
+                title="Campaign Analysis"
+                data-testid="nav-campaign-analysis"
+                onClick={() => setActivePage('campaign-analysis')}
+                className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                  activePage === 'campaign-analysis'
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+                }`}
+              >
+                <BarChart2 size={20} strokeWidth={2.5} />
               </button>
             )}
             {(user?.isCfo || user?.isSuperadmin) && (
@@ -428,6 +443,18 @@ function App() {
             }`}
           >
             <Activity size={20} strokeWidth={2.5} />
+          </button>
+        )}
+        {(user?.isBdm || user?.isSuperadmin) && (
+          <button
+            title="Campaign Analysis"
+            data-testid="nav-campaign-analysis-mobile"
+            onClick={() => setActivePage('campaign-analysis')}
+            className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+              activePage === 'campaign-analysis' ? 'text-indigo-600' : 'text-zinc-400'
+            }`}
+          >
+            <BarChart2 size={20} strokeWidth={2.5} />
           </button>
         )}
         {(user?.isCfo || user?.isSuperadmin) && (

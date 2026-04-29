@@ -33,6 +33,7 @@ export {
   COLLECTIONS_AGENT_STEPS,
   ACCOUNT_MANAGER_STEPS,
   FINANCE_CONTROLLER_STEPS,
+  BDM_STEPS,
 } from './walkthrough-steps';
 
 import type { WalkthroughStep } from './walkthrough-steps';

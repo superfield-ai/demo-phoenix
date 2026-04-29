@@ -28,6 +28,7 @@ const DEMO_ROLES = [
   { role: 'collections_agent', username: 'demo-collections-agent' },
   { role: 'finance_controller', username: 'demo-finance-controller' },
   { role: 'account_manager', username: 'demo-account-manager' },
+  { role: 'bdm', username: 'demo-bdm' },
 ] as const;
 
 /**
