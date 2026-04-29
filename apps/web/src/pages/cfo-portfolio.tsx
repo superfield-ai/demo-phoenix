@@ -778,7 +778,7 @@ export function CfoPortfolioPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+    <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -858,7 +858,7 @@ export function CfoPortfolioPage() {
       </div>
 
       {/* Executive summary bar */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white border border-zinc-200 rounded-lg p-4">
           <div className="text-xs text-zinc-500 uppercase tracking-wide">Total CLTV</div>
           <div className="text-2xl font-semibold text-zinc-900 mt-1">{formatCltv(totalCltv)}</div>
@@ -918,7 +918,7 @@ export function CfoPortfolioPage() {
         </div>
 
         {/* Chart with tooltip */}
-        <div className="relative p-4">
+        <div className="relative p-4 overflow-x-auto" data-testid="cfo-chart-container">
           {displayedSegments.length === 0 ? (
             <ContextualEmptyState
               message="No portfolio data yet — prospects must be scored and assigned to a rep before they appear here"
@@ -961,7 +961,7 @@ export function CfoPortfolioPage() {
           <span className="text-xs text-zinc-400 ml-1">(client-side, no server round-trip)</span>
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Interest rate delta */}
           <div>
             <label className="block text-xs font-medium text-zinc-600 mb-2">

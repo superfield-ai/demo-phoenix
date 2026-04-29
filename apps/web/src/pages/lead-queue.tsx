@@ -29,6 +29,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { SlidersHorizontal, X } from 'lucide-react';
 import { SkeletonRows } from '../components/Skeleton';
 import { ContextualEmptyState } from '../components/ContextualEmptyState';
 import { ScoreTooltip } from '../components/ScoreTooltip';
@@ -180,63 +181,131 @@ function KycPill({ status }: { status: string | null }) {
 // LeadRow
 // ---------------------------------------------------------------------------
 
-function LeadRow({ lead }: { lead: QueueLead }) {
+function LeadRow({ lead, onSelectLead }: { lead: QueueLead; onSelectLead?: (id: string) => void }) {
+  const content = (
+    <>
+      {/* Mobile card layout (below md) */}
+      <div className="flex md:hidden w-full items-start gap-3 py-1">
+        <div className="flex-shrink-0 flex items-center pt-0.5">
+          <TierBadge tier={lead.score_tier} lead={lead} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <p className="font-semibold text-sm text-zinc-900 truncate">{lead.company_name}</p>
+            <div className="flex items-center gap-1 shrink-0">
+              {lead.scoring_in_progress && (
+                <span
+                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 uppercase tracking-wide whitespace-nowrap animate-pulse"
+                  data-testid="scoring-badge"
+                >
+                  Scoring…
+                </span>
+              )}
+              {lead.nudge && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wide whitespace-nowrap">
+                  Follow up?
+                </span>
+              )}
+            </div>
+          </div>
+          <p className="text-xs text-zinc-500 truncate mt-0.5">
+            {[lead.industry, lead.sic_code].filter(Boolean).join(' · ') || '—'}
+          </p>
+          <div className="flex items-center gap-3 mt-1.5">
+            <span className="text-xs text-zinc-500">
+              CLTV:{' '}
+              <span className="font-medium text-zinc-700">
+                {formatCltv(lead.cltv_low, lead.cltv_high)}
+              </span>
+            </span>
+            <KycPill status={lead.kyc_status} />
+            <span className="text-xs text-zinc-500">{lead.days_in_queue}d</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop row layout (md+) */}
+      <div className="hidden md:flex w-full items-center gap-4">
+        {/* Tier badge — most prominent element */}
+        <div className="flex-shrink-0 w-10 flex justify-center">
+          <TierBadge tier={lead.score_tier} lead={lead} />
+        </div>
+
+        {/* Company / industry / SIC */}
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm text-zinc-900 truncate">{lead.company_name}</p>
+          <p className="text-xs text-zinc-500 truncate">
+            {[lead.industry, lead.sic_code].filter(Boolean).join(' · ') || '—'}
+          </p>
+        </div>
+
+        {/* CLTV estimate */}
+        <div className="w-32 text-right shrink-0">
+          <p className="text-xs text-zinc-400 uppercase tracking-wide">CLTV</p>
+          <p className="text-sm font-medium text-zinc-700">
+            {formatCltv(lead.cltv_low, lead.cltv_high)}
+          </p>
+        </div>
+
+        {/* KYC status */}
+        <div className="w-24 text-center shrink-0">
+          <KycPill status={lead.kyc_status} />
+        </div>
+
+        {/* Days in queue */}
+        <div className="w-16 text-center shrink-0">
+          <p className="text-xs text-zinc-400 uppercase tracking-wide">Days</p>
+          <p className="text-sm font-medium text-zinc-700">{lead.days_in_queue}</p>
+        </div>
+
+        {/* Scoring badge */}
+        {lead.scoring_in_progress && (
+          <div className="shrink-0" data-testid="scoring-badge">
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 uppercase tracking-wide whitespace-nowrap animate-pulse">
+              Scoring…
+            </span>
+          </div>
+        )}
+
+        {/* Follow-up nudge */}
+        {lead.nudge && (
+          <div className="shrink-0">
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wide whitespace-nowrap">
+              Follow up?
+            </span>
+          </div>
+        )}
+
+        {/* Assigned rep */}
+        <div className="w-28 text-right shrink-0">
+          <p className="text-xs text-zinc-400 truncate">
+            {lead.assigned_rep_id?.slice(0, 8) ?? '—'}
+          </p>
+        </div>
+      </div>
+    </>
+  );
+
+  if (onSelectLead) {
+    return (
+      <button
+        type="button"
+        onClick={() => onSelectLead(lead.id)}
+        className="w-full block px-4 py-3 border-b border-zinc-100 hover:bg-zinc-50 transition-colors text-left min-h-[44px]"
+        aria-label={`View lead: ${lead.company_name}`}
+        data-testid="lead-row"
+      >
+        {content}
+      </button>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-4 px-4 py-3 border-b border-zinc-100 hover:bg-zinc-50 transition-colors">
-      {/* Tier badge — most prominent element */}
-      <div className="flex-shrink-0 w-14 flex justify-center">
-        <TierBadge tier={lead.score_tier} lead={lead} />
-      </div>
-
-      {/* Company / industry / SIC */}
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-sm text-zinc-900 truncate">{lead.company_name}</p>
-        <p className="text-xs text-zinc-500 truncate">
-          {[lead.industry, lead.sic_code].filter(Boolean).join(' · ') || '—'}
-        </p>
-      </div>
-
-      {/* CLTV estimate */}
-      <div className="w-32 text-right shrink-0">
-        <p className="text-xs text-zinc-400 uppercase tracking-wide">CLTV</p>
-        <p className="text-sm font-medium text-zinc-700">
-          {formatCltv(lead.cltv_low, lead.cltv_high)}
-        </p>
-      </div>
-
-      {/* KYC status */}
-      <div className="w-24 text-center shrink-0">
-        <KycPill status={lead.kyc_status} />
-      </div>
-
-      {/* Days in queue */}
-      <div className="w-16 text-center shrink-0">
-        <p className="text-xs text-zinc-400 uppercase tracking-wide">Days</p>
-        <p className="text-sm font-medium text-zinc-700">{lead.days_in_queue}</p>
-      </div>
-
-      {/* Scoring badge — shown when the prospect has no CLTVScore yet */}
-      {lead.scoring_in_progress && (
-        <div className="shrink-0" data-testid="scoring-badge">
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 uppercase tracking-wide whitespace-nowrap animate-pulse">
-            Scoring…
-          </span>
-        </div>
-      )}
-
-      {/* Follow-up nudge — shown when deal is in Contacted stage with no recent activity */}
-      {lead.nudge && (
-        <div className="shrink-0">
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wide whitespace-nowrap">
-            Follow up?
-          </span>
-        </div>
-      )}
-
-      {/* Assigned rep */}
-      <div className="w-28 text-right shrink-0 hidden md:block">
-        <p className="text-xs text-zinc-400 truncate">{lead.assigned_rep_id?.slice(0, 8) ?? '—'}</p>
-      </div>
+    <div
+      className="w-full block px-4 py-3 border-b border-zinc-100 hover:bg-zinc-50 transition-colors min-h-[44px]"
+      data-testid="lead-row"
+    >
+      {content}
     </div>
   );
 }
@@ -252,7 +321,13 @@ function LeadRow({ lead }: { lead: QueueLead }) {
  * are rendered; the rest are replaced by a single spacer div. This avoids
  * pagination controls while keeping DOM size bounded.
  */
-function VirtualLeadList({ leads }: { leads: QueueLead[] }) {
+function VirtualLeadList({
+  leads,
+  onSelectLead,
+}: {
+  leads: QueueLead[];
+  onSelectLead?: (id: string) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
@@ -293,7 +368,7 @@ function VirtualLeadList({ leads }: { leads: QueueLead[] }) {
         <div style={{ paddingTop, paddingBottom }}>
           {visibleLeads.map((lead) => (
             <div key={lead.id} style={{ height: ROW_HEIGHT_PX }}>
-              <LeadRow lead={lead} />
+              <LeadRow lead={lead} onSelectLead={onSelectLead} />
             </div>
           ))}
         </div>
@@ -342,7 +417,7 @@ interface FilterPanelProps {
   onIndustriesChange: (i: string[]) => void;
 }
 
-function FilterPanel({
+function FilterPanelContent({
   sort,
   onSortChange,
   tiers,
@@ -366,7 +441,7 @@ function FilterPanel({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-white border-b border-zinc-200">
+    <>
       {/* Sort control */}
       <div className="flex items-center gap-1">
         <span className="text-xs text-zinc-500 mr-1">Sort:</span>
@@ -374,7 +449,7 @@ function FilterPanel({
           <button
             key={s}
             onClick={() => onSortChange(s)}
-            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+            className={`px-3 py-2 rounded text-xs font-medium transition-colors min-h-[44px] min-w-[44px] ${
               sort === s
                 ? 'bg-indigo-100 text-indigo-700'
                 : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
@@ -395,7 +470,7 @@ function FilterPanel({
             <button
               key={tier}
               onClick={() => toggleTier(tier)}
-              className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${
+              className={`px-3 py-2 rounded text-xs font-semibold transition-colors min-h-[44px] min-w-[44px] ${
                 active ? `${bg} ${text} ring-1 ring-current` : 'bg-zinc-100 text-zinc-500'
               }`}
             >
@@ -413,7 +488,7 @@ function FilterPanel({
             <button
               key={ind}
               onClick={() => toggleIndustry(ind)}
-              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+              className={`px-3 py-2 rounded text-xs font-medium transition-colors min-h-[44px] ${
                 industries.includes(ind)
                   ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-400'
                   : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
@@ -432,12 +507,102 @@ function FilterPanel({
             onTiersChange([]);
             onIndustriesChange([]);
           }}
-          className="px-2 py-1 rounded text-xs text-red-500 hover:bg-red-50 transition-colors"
+          className="px-3 py-2 rounded text-xs text-red-500 hover:bg-red-50 transition-colors min-h-[44px]"
         >
           Clear
         </button>
       )}
-    </div>
+    </>
+  );
+}
+
+function FilterPanel(props: FilterPanelProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const activeFilterCount = props.tiers.length + props.industries.length;
+
+  return (
+    <>
+      {/* Desktop filter bar — visible at md+ */}
+      <div className="hidden md:flex flex-wrap items-center gap-3 px-4 py-3 bg-white border-b border-zinc-200">
+        <FilterPanelContent {...props} />
+      </div>
+
+      {/* Mobile filter trigger — visible below md */}
+      <div className="flex md:hidden items-center gap-2 px-4 py-2 bg-white border-b border-zinc-200">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open filters"
+          data-testid="filter-trigger"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-100 text-zinc-700 text-xs font-medium min-h-[44px] min-w-[44px]"
+        >
+          <SlidersHorizontal size={14} />
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+        {/* Sort quick buttons on mobile */}
+        <div className="flex items-center gap-1">
+          {(['score', 'cltv', 'days'] as LeadQueueSort[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => props.onSortChange(s)}
+              className={`px-2 py-2 rounded text-xs font-medium transition-colors min-h-[44px] ${
+                props.sort === s
+                  ? 'bg-indigo-100 text-indigo-700'
+                  : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+              }`}
+            >
+              {s === 'score' ? 'Score' : s === 'cltv' ? 'CLTV' : 'Days'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Mobile filter overlay / bottom sheet */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col justify-end md:hidden"
+          role="dialog"
+          aria-label="Filter panel"
+          aria-modal="true"
+        >
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden="true"
+          />
+          {/* Sheet */}
+          <div className="relative bg-white rounded-t-2xl shadow-xl px-4 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-zinc-900">Filters</span>
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                aria-label="Close filters"
+                className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <FilterPanelContent {...props} />
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              className="w-full mt-2 py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold min-h-[44px]"
+            >
+              Apply filters
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -447,7 +612,7 @@ function FilterPanel({
 
 type TabId = 'queue' | 'disqualified';
 
-export function LeadQueuePage() {
+export function LeadQueuePage({ onSelectLead }: { onSelectLead?: (id: string) => void } = {}) {
   const [activeTab, setActiveTab] = useState<TabId>('queue');
 
   // Queue state
@@ -568,10 +733,10 @@ export function LeadQueuePage() {
         />
       )}
 
-      {/* Column headers (queue tab only) */}
+      {/* Column headers (queue tab only) — hidden on mobile */}
       {activeTab === 'queue' && leads.length > 0 && (
-        <div className="flex items-center gap-4 px-4 py-2 bg-zinc-50 border-b border-zinc-200 text-xs font-medium text-zinc-500 uppercase tracking-wide">
-          <div className="w-14 text-center shrink-0">Tier</div>
+        <div className="hidden md:flex items-center gap-4 px-4 py-2 bg-zinc-50 border-b border-zinc-200 text-xs font-medium text-zinc-500 uppercase tracking-wide">
+          <div className="w-10 text-center shrink-0">Tier</div>
           <div className="flex-1">Company</div>
           <div className="w-32 text-right shrink-0">CLTV</div>
           <div className="w-24 text-center shrink-0">KYC</div>
@@ -603,7 +768,9 @@ export function LeadQueuePage() {
                 testId="lead-queue-empty-state"
               />
             )}
-            {!loadingQueue && !queueError && leads.length > 0 && <VirtualLeadList leads={leads} />}
+            {!loadingQueue && !queueError && leads.length > 0 && (
+              <VirtualLeadList leads={leads} onSelectLead={onSelectLead} />
+            )}
           </>
         )}
 
