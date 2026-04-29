@@ -31,7 +31,7 @@ export async function handleUsersRequest(
     const user = await getAuthenticatedUser(req);
     if (!user) return json({ error: 'Unauthorized' }, 401);
 
-    let body: { onboarding_completed?: boolean } = {};
+    let body: { onboarding_completed?: boolean };
     try {
       body = (await req.json()) as { onboarding_completed?: boolean };
     } catch {

@@ -29,7 +29,6 @@ import { startPostgres, type PgContainer } from 'db/pg-container';
 import { migrate } from 'db';
 import { handleUsersRequest } from './users';
 import type { AppState } from '../index';
-import { makeJson } from '../lib/response';
 
 let pg: PgContainer;
 let sql: ReturnType<typeof postgres>;
