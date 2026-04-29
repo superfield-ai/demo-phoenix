@@ -142,6 +142,7 @@ export interface PaymentPlanDetail extends PaymentPlanSummary {
   installments: PaymentPlanInstallment[];
   payment_total: number;
   paid_installment_count: number;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
