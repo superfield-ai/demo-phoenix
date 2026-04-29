@@ -164,8 +164,23 @@ export async function handleAuthRequest(
       isSuperadmin: isSuperuser(user.id),
       isCrmAdmin: false,
       isComplianceOfficer: false,
+      isCfo: false,
       role: null,
     }));
+
+    // Fetch onboarding_completed from user properties
+    let onboardingCompleted = false;
+    try {
+      const rows = await appState.sql<{ properties: Record<string, unknown> }[]>`
+        SELECT properties FROM entities
+        WHERE id = ${user.id} AND type = 'user'
+        LIMIT 1
+      `;
+      onboardingCompleted = rows[0]?.properties?.onboarding_completed === true;
+    } catch {
+      // Ignore — defaults to false
+    }
+
     return new Response(
       JSON.stringify({
         user: {
@@ -173,7 +188,9 @@ export async function handleAuthRequest(
           isSuperadmin: access.isSuperadmin,
           isCrmAdmin: access.isCrmAdmin,
           isComplianceOfficer: access.isComplianceOfficer,
+          isCfo: access.isCfo,
           role: access.role,
+          onboarding_completed: onboardingCompleted,
         },
       }),
       {
