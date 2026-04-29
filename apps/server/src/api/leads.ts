@@ -557,9 +557,11 @@ export async function handleLeadsRequest(
 
     const newStage = stage as DealStage;
 
-    // Perform the stage update and activity insert in a single transaction.
+    // Perform the stage update, activity insert, and optional customer creation
+    // in a single transaction.
     let dealId: string;
     let activityId: string;
+    let customerId: string | null = null;
 
     await sql.begin(async (txRaw) => {
       const tx = txRaw as unknown as TxSql;
@@ -584,6 +586,42 @@ export async function handleLeadsRequest(
         dealId = newDeal.id;
       }
 
+      // When transitioning to closed_won, atomically create a Customer record
+      // if one does not already exist for this prospect (idempotent).
+      if (newStage === 'closed_won') {
+        // Fetch the prospect for company_name and segment.
+        const [prospectRow] = await tx<
+          {
+            company_name: string;
+            company_segment: string | null;
+          }[]
+        >`
+          SELECT company_name, company_segment
+          FROM rl_prospects
+          WHERE id = ${prospectId}
+        `;
+
+        // Check whether a Customer already exists for this prospect.
+        const [existingCustomer] = await tx<{ id: string }[]>`
+          SELECT id FROM rl_customers WHERE prospect_id = ${prospectId} LIMIT 1
+        `;
+
+        if (existingCustomer) {
+          customerId = existingCustomer.id;
+        } else {
+          const [newCustomer] = await tx<{ id: string }[]>`
+            INSERT INTO rl_customers (prospect_id, company_name, segment)
+            VALUES (
+              ${prospectId},
+              ${prospectRow?.company_name ?? 'Unknown'},
+              ${prospectRow?.company_segment ?? null}
+            )
+            RETURNING id
+          `;
+          customerId = newCustomer.id;
+        }
+      }
+
       // Write the activity timeline entry.
       const [activityRow] = await tx<{ id: string }[]>`
         INSERT INTO rl_activities (prospect_id, activity_type, actor_id, note, metadata)
@@ -599,7 +637,11 @@ export async function handleLeadsRequest(
       activityId = activityRow.id;
     });
 
-    return json({ deal_id: dealId!, activity_id: activityId! });
+    return json({
+      deal_id: dealId!,
+      activity_id: activityId!,
+      ...(customerId !== null ? { customer_id: customerId } : {}),
+    });
   }
 
   // ── POST /api/leads/:id/activities ─────────────────────────────────────────
