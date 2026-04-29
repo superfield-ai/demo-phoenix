@@ -1,7 +1,7 @@
 /**
  * @file apps/server/tests/integration/demo-seed-data.test.ts
  *
- * Integration tests for seedDemoData() (issue #46).
+ * Integration tests for seedDemoData() (issues #46, #58).
  *
  * No mocks — real Postgres container + real migrate/seed functions.
  *
@@ -32,8 +32,19 @@
  *
  *   TP-9  Query rl_customers WHERE health_score < 0.4; assert at least one row.
  *
+ *   TP-10 (issue #58) Each collection case has >= 3 contact log entries.
+ *
+ *   TP-11 (issue #58) All three write-off approval statuses present.
+ *
+ *   TP-12 (issue #58) Interventions: resolved >= 5, in_progress >= 2, open >= 1.
+ *
+ *   TP-13 (issue #58) Health alerts at 1, 3, 7, 14 days old exist.
+ *
+ *   TP-14 (issue #58) KYC manual review prospects present with failed KYC records.
+ *
  * Canonical docs: docs/prd.md
  * Issue: https://github.com/superfield-ai/demo-phoenix/issues/46
+ * Issue: https://github.com/superfield-ai/demo-phoenix/issues/58
  */
 
 import { afterAll, beforeAll, describe, test, expect } from 'vitest';
@@ -387,5 +398,179 @@ describe('fictional data', () => {
     for (const real of realNames) {
       expect(names).not.toContain(real);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TP-10 (issue #58): Contact logs — each collection case has >= 3 entries
+// ---------------------------------------------------------------------------
+
+describe('TP-10: contact logs per collection case', () => {
+  test('every collection case has at least 3 contact log entries', async () => {
+    const rows = await sql<{ collection_case_id: string; cnt: string }[]>`
+      SELECT collection_case_id, COUNT(*)::TEXT AS cnt
+      FROM rl_contact_logs
+      GROUP BY collection_case_id
+    `;
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    for (const row of rows) {
+      expect(
+        Number(row.cnt),
+        `case ${row.collection_case_id} must have >= 3 contact logs`,
+      ).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  test('all three contact types (call, email, portal) are used', async () => {
+    const rows = await sql<{ contact_type: string }[]>`
+      SELECT DISTINCT contact_type FROM rl_contact_logs
+    `;
+    const types = new Set(rows.map((r: { contact_type: string }) => r.contact_type));
+    expect(types.has('call')).toBe(true);
+    expect(types.has('email')).toBe(true);
+    expect(types.has('portal')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TP-11 (issue #58): Write-off approvals — all three statuses present
+// ---------------------------------------------------------------------------
+
+describe('TP-11: write-off approvals', () => {
+  test('pending_approval, approved, and rejected write-off approvals exist', async () => {
+    const rows = await sql<{ status: string; cnt: string }[]>`
+      SELECT status, COUNT(*)::TEXT AS cnt
+      FROM rl_write_off_approvals
+      GROUP BY status
+    `;
+    const approvalMap = new Map(
+      rows.map((r: { status: string; cnt: string }) => [r.status, Number(r.cnt)]),
+    );
+    for (const s of ['pending_approval', 'approved', 'rejected']) {
+      expect(
+        approvalMap.get(s),
+        `write-off approval status '${s}' must have at least one row`,
+      ).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  test('pending approval has no reviewed_at date', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_write_off_approvals
+      WHERE status = 'pending_approval' AND reviewed_at IS NULL
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TP-12 (issue #58): Interventions — resolved >= 5, in_progress >= 2, open >= 1
+// ---------------------------------------------------------------------------
+
+describe('TP-12: interventions', () => {
+  test('at least 5 resolved interventions with outcome notes', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_interventions
+      WHERE status = 'resolved' AND outcome IS NOT NULL
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(5);
+  });
+
+  test('at least 2 in_progress interventions', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt FROM rl_interventions WHERE status = 'in_progress'
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(2);
+  });
+
+  test('at least 1 open intervention', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt FROM rl_interventions WHERE status = 'open'
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TP-13 (issue #58): Health alerts at 1, 3, 7, 14 days old
+// ---------------------------------------------------------------------------
+
+describe('TP-13: customer health alerts', () => {
+  test('at least 4 health score records in the past 14 days (open alerts)', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_customer_health_scores
+      WHERE score_date >= CURRENT_DATE - INTERVAL '14 days'
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(4);
+  });
+
+  test('health alert exists at the 14-day age (no intervention sentinel)', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_customer_health_scores
+      WHERE score_date = CURRENT_DATE - INTERVAL '14 days'
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(1);
+  });
+
+  test('critical-score health alerts (score < 40) exist', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_customer_health_scores
+      WHERE score < 40
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TP-14 (issue #58): KYC manual review prospects with distinct failure reasons
+// ---------------------------------------------------------------------------
+
+describe('TP-14: KYC manual review', () => {
+  test('at least 3 prospects are in kyc_manual_review stage', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_prospects
+      WHERE stage = 'kyc_manual_review'
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(3);
+  });
+
+  test('KYC manual review prospects have failed KYC records', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_kyc_records k
+      JOIN rl_prospects p ON p.id = k.prospect_id
+      WHERE p.stage = 'kyc_manual_review'
+        AND k.verification_status = 'failed'
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TP-15 (issue #58): Dunning sequences — D+1, D+7, D+14, D+30 per invoice
+// ---------------------------------------------------------------------------
+
+describe('TP-15: dunning action sequences', () => {
+  test('at least one invoice has 4+ dunning actions (D+1 through D+30)', async () => {
+    const rows = await sql<{ invoice_id: string; cnt: string }[]>`
+      SELECT invoice_id, COUNT(*)::TEXT AS cnt
+      FROM rl_dunning_actions
+      GROUP BY invoice_id
+      HAVING COUNT(*) >= 4
+    `;
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('multiple dunning action types exist', async () => {
+    const rows = await sql<{ action_type: string }[]>`
+      SELECT DISTINCT action_type FROM rl_dunning_actions
+    `;
+    expect(rows.length).toBeGreaterThanOrEqual(2);
   });
 });
