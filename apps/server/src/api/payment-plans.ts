@@ -127,11 +127,8 @@ export async function handlePaymentPlansRequest(
     }
 
     try {
-      const plan = await updatePaymentPlanStatus(
-        planId,
-        b.status as Exclude<PaymentPlanStatus, 'cancelled'>,
-        sql,
-      );
+      const nextStatus = b.status as 'breached' | 'completed';
+      const plan = await updatePaymentPlanStatus(planId, nextStatus, sql);
       if (!plan) return json({ error: 'Payment plan not found' }, 404);
       return json(plan, 200);
     } catch (err) {

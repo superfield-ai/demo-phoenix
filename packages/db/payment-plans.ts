@@ -404,7 +404,7 @@ export async function createPaymentPlan(
     throw new Error('first_due_date cannot be in the past');
   }
 
-  return sqlClient.begin(async (tx) => {
+  return sqlClient.begin(async (tx: any) => {
     const [caseRow] = await tx<{ id: string }[]>`
       SELECT id
       FROM rl_collection_cases
@@ -475,7 +475,7 @@ export async function updatePaymentPlanStatus(
   status: Exclude<PaymentPlanStatus, 'cancelled'>,
   sqlClient: postgres.Sql = defaultSql,
 ): Promise<PaymentPlanDetail | null> {
-  return sqlClient.begin(async (tx) => {
+  return sqlClient.begin(async (tx: any) => {
     const detail = await getPaymentPlanDetail(planId, tx);
     if (!detail) return null;
 
