@@ -50,7 +50,8 @@
     "./dunning": "./dunning.ts",
     "./collection-cases": "./collection-cases.ts",
     "./payment-plans": "./payment-plans.ts",
-    "./write-off-approvals": "./write-off-approvals.ts"
+    "./write-off-approvals": "./write-off-approvals.ts",
+    "./customer-health-scores": "./customer-health-scores.ts"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
