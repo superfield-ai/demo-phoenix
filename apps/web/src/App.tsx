@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './components/Login';
-import { Settings, User, Users, KanbanSquare, TrendingUp } from 'lucide-react';
+import { Settings, User, Users, KanbanSquare, TrendingUp, HelpCircle } from 'lucide-react';
 import { MobileInstallPage } from './pages/mobile-install';
 import { SettingsPage } from './pages/settings';
 import { LeadDetailPage, LeadQueuePage } from './pages/lead-detail';
@@ -10,6 +10,12 @@ import { CfoPortfolioPage } from './pages/cfo-portfolio';
 import { usePlatform } from './hooks/use-platform';
 import { isDismissalActive, DISMISSED_KEY } from './components/pwa/install-prompt';
 import { NotificationBell } from './components/NotificationBell';
+import {
+  WalkthroughModal,
+  SALES_REP_STEPS,
+  CFO_STEPS,
+  resetOnboarding,
+} from './components/WalkthroughModal';
 
 type ActivePage = 'pipeline' | 'leads' | 'settings' | 'cfo-portfolio';
 
@@ -51,10 +57,37 @@ function MobileGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Determine walkthrough steps for the authenticated user's role.
+ * Returns null if no walkthrough applies to the role.
+ */
+function getWalkthroughSteps(role: string | null | undefined, isCfo: boolean | undefined) {
+  if (isCfo || role === 'cfo') return CFO_STEPS;
+  if (role === 'sales_rep') return SALES_REP_STEPS;
+  return null;
+}
+
 function App() {
   const { user, logout, loading } = useAuth();
   const [activePage, setActivePage] = useState<ActivePage>('pipeline');
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [showWalkthrough, setShowWalkthrough] = useState<boolean | null>(null);
+
+  // Determine whether to show the walkthrough once we have user data
+  React.useEffect(() => {
+    if (!user) return;
+    // Show if onboarding is not yet completed
+    if (user.onboarding_completed === false) {
+      const steps = getWalkthroughSteps(user.role, user.isCfo);
+      if (steps) setShowWalkthrough(true);
+    }
+  }, [user]);
+
+  async function handleShowTour() {
+    if (!user) return;
+    await resetOnboarding();
+    setShowWalkthrough(true);
+  }
 
   if (loading) {
     return (
@@ -67,6 +100,8 @@ function App() {
   if (!user) {
     return <Login />;
   }
+
+  const walkthroughSteps = getWalkthroughSteps(user.role, user.isCfo);
 
   function renderMain() {
     if (activePage === 'pipeline') {
@@ -88,6 +123,11 @@ function App() {
 
   return (
     <div className="flex h-screen w-full bg-zinc-50 font-sans overflow-hidden text-zinc-900">
+      {/* Onboarding walkthrough modal */}
+      {showWalkthrough && walkthroughSteps && (
+        <WalkthroughModal steps={walkthroughSteps} onClose={() => setShowWalkthrough(false)} />
+      )}
+
       {/* Left Sidebar */}
       <nav className="w-16 shrink-0 border-r border-zinc-200 bg-white flex flex-col items-center py-6 justify-between z-10">
         <div className="flex flex-col items-center gap-6">
@@ -134,6 +174,16 @@ function App() {
                 }`}
               >
                 <TrendingUp size={20} strokeWidth={2.5} />
+              </button>
+            )}
+            {/* Show tour — only for roles that have a walkthrough */}
+            {walkthroughSteps && (
+              <button
+                title="Show tour"
+                onClick={handleShowTour}
+                className="p-3 rounded-xl flex items-center justify-center transition-all text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600"
+              >
+                <HelpCircle size={20} strokeWidth={2.5} />
               </button>
             )}
             <button

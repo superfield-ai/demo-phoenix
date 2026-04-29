@@ -26,6 +26,36 @@ export async function handleUsersRequest(
   const { sql } = appState;
   const json = makeJson(corsHeaders);
 
+  // PATCH /api/users/me/onboarding — set onboarding_completed for the authenticated user
+  if (req.method === 'PATCH' && url.pathname === '/api/users/me/onboarding') {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return json({ error: 'Unauthorized' }, 401);
+
+    let body: { onboarding_completed?: boolean } = {};
+    try {
+      body = (await req.json()) as { onboarding_completed?: boolean };
+    } catch {
+      return json({ error: 'Invalid JSON' }, 400);
+    }
+
+    if (typeof body.onboarding_completed !== 'boolean') {
+      return json({ error: 'onboarding_completed must be a boolean' }, 400);
+    }
+
+    await sql`
+      UPDATE entities
+      SET properties = jsonb_set(
+        properties,
+        '{onboarding_completed}',
+        ${body.onboarding_completed ? 'true' : 'false'}::jsonb
+      ),
+      updated_at = NOW()
+      WHERE id = ${user.id} AND type = 'user'
+    `;
+
+    return json({ success: true, onboarding_completed: body.onboarding_completed });
+  }
+
   // DELETE /api/users/:id
   if (req.method === 'DELETE' && url.pathname.match(/^\/api\/users\/[^/]+$/)) {
     const user = await getAuthenticatedUser(req);
