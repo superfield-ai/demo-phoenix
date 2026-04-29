@@ -18,6 +18,7 @@
 import type postgres from 'postgres';
 import { sql as defaultSql } from './index';
 import { listPaymentPlansForCase, type PaymentPlanSummary } from './payment-plans';
+import { getLatestWriteOffApprovalForCase, type WriteOffApproval } from './write-off-approvals';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -108,6 +109,8 @@ export interface CollectionCaseDetail {
   }[];
   /** Payment plans configured on this collection case. */
   payment_plans: PaymentPlanSummary[];
+  /** Most recent write-off approval or rejection linked to this case. */
+  latest_write_off_approval: WriteOffApproval | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -332,6 +335,7 @@ export async function getCollectionCaseDetail(
   `;
 
   const paymentPlans = await listPaymentPlansForCase(caseId, sqlClient);
+  const latestWriteOffApproval = await getLatestWriteOffApprovalForCase(sqlClient, caseId);
 
   return {
     id: cr.id,
@@ -384,6 +388,7 @@ export async function getCollectionCaseDetail(
       created_at: r.created_at,
     })),
     payment_plans: paymentPlans,
+    latest_write_off_approval: latestWriteOffApproval,
   };
 }
 
@@ -430,7 +435,7 @@ export async function createContactLog(
       ${contact_type},
       ${outcome},
       ${notes},
-      ${contacted_at ? contacted_at : null}::timestamptz
+      COALESCE(${contacted_at ? contacted_at : null}::timestamptz, NOW())
     )
     RETURNING
       id,

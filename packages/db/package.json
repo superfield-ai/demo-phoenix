@@ -49,7 +49,8 @@
     "./invoices": "./invoices.ts",
     "./dunning": "./dunning.ts",
     "./collection-cases": "./collection-cases.ts",
-    "./payment-plans": "./payment-plans.ts"
+    "./payment-plans": "./payment-plans.ts",
+    "./write-off-approvals": "./write-off-approvals.ts"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"

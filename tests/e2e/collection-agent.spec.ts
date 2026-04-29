@@ -41,6 +41,7 @@ const BUN_BIN =
 // Use a distinct port to avoid conflicts with other e2e suites.
 const SERVER_PORT = 31432;
 const SERVER_READY_TIMEOUT_MS = 30_000;
+const WRITE_OFF_APPROVAL_THRESHOLD = '50';
 
 type DemoEnv = {
   pg: PgContainer;
@@ -108,6 +109,7 @@ async function startDemoServer(): Promise<DemoEnv> {
       PORT: String(SERVER_PORT),
       DEMO_MODE: 'true',
       CSRF_DISABLED: 'true',
+      WRITE_OFF_APPROVAL_THRESHOLD,
     },
     stdout: 'inherit',
     stderr: 'inherit',
@@ -153,6 +155,29 @@ async function signInAsCollectionsAgent(): Promise<import('@playwright/test').Pa
     },
     { timeout: 15_000 },
   );
+  await page.reload({ waitUntil: 'networkidle' });
+
+  return page;
+}
+
+async function signInAsFinanceController(): Promise<import('@playwright/test').Page> {
+  const page = await browser.newPage();
+  await page.goto(demoEnv.baseUrl, { waitUntil: 'networkidle' });
+
+  const btn = page.getByRole('button', { name: 'Sign in as Finance Controller' });
+  await playwrightExpect(btn).toBeVisible({ timeout: 10_000 });
+  await btn.click();
+
+  await page.waitForFunction(
+    () => {
+      const loginHeading = Array.from(document.querySelectorAll('h1')).find(
+        (el) => el.textContent?.trim() === 'Superfield' && el.closest('.min-h-screen'),
+      );
+      return !loginHeading;
+    },
+    { timeout: 15_000 },
+  );
+  await page.reload({ waitUntil: 'networkidle' });
 
   return page;
 }
@@ -275,6 +300,152 @@ describe('collections agent case queue — E2E', () => {
         );
       } finally {
         await page.close();
+      }
+    },
+    SERVER_READY_TIMEOUT_MS + 120_000,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// E2E: settlement proposal and write-off approval flow
+// ---------------------------------------------------------------------------
+
+describe('settlement proposal and finance approval — E2E', () => {
+  it(
+    'Collections Agent proposes a threshold-busting settlement and Finance Controller approves it',
+    async () => {
+      const { sql } = demoEnv;
+
+      const agentRows = await sql<{ id: string }[]>`
+        SELECT id FROM entities
+        WHERE type = 'user'
+          AND properties->>'role' = 'collections_agent'
+        LIMIT 1
+      `;
+      if (agentRows.length === 0) {
+        throw new Error('No collections_agent user found — demo seed did not run.');
+      }
+      const agentId = agentRows[0].id;
+
+      const financeRows = await sql<{ id: string }[]>`
+        SELECT id FROM entities
+        WHERE type = 'user'
+          AND properties->>'role' = 'finance_controller'
+        LIMIT 1
+      `;
+      if (financeRows.length === 0) {
+        throw new Error('No finance_controller user found — demo seed did not run.');
+      }
+
+      const customerRows = await sql<{ id: string; company_name: string }[]>`
+        SELECT id, company_name FROM rl_customers LIMIT 1
+      `;
+      if (customerRows.length === 0) {
+        throw new Error('No customers found — demo seed did not run.');
+      }
+      const customerId = customerRows[0].id;
+      const companyName = customerRows[0].company_name;
+
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() - 35);
+      const dueDateStr = dueDate.toISOString().slice(0, 10);
+
+      const [invRow] = await sql<{ id: string }[]>`
+        INSERT INTO rl_invoices (customer_id, amount, currency, due_date, status, issued_at)
+        VALUES (${customerId}, 1000, 'USD', ${dueDateStr}, 'overdue', NOW())
+        RETURNING id
+      `;
+      const invoiceId = invRow.id;
+
+      await sql`
+        UPDATE rl_invoices SET status = 'in_collection', updated_at = NOW()
+        WHERE id = ${invoiceId}
+      `;
+
+      const [caseRow] = await sql<{ id: string }[]>`
+        INSERT INTO rl_collection_cases (invoice_id, agent_id, status)
+        VALUES (${invoiceId}, ${agentId}, 'open')
+        RETURNING id
+      `;
+      const caseId = caseRow.id;
+
+      const agentPage = await signInAsCollectionsAgent();
+      const financePage = await signInAsFinanceController();
+
+      try {
+        const queueBtn = agentPage.getByTestId('nav-collection-queue');
+        await playwrightExpect(queueBtn).toBeVisible({ timeout: 10_000 });
+        await queueBtn.click();
+
+        const caseRowEl = agentPage.getByTestId(`case-row-${caseId}`);
+        await playwrightExpect(caseRowEl).toBeVisible({ timeout: 10_000 });
+        await caseRowEl.click();
+
+        const detail = agentPage.getByTestId('case-detail');
+        await playwrightExpect(detail).toBeVisible({ timeout: 10_000 });
+
+        const settlementBtn = agentPage.getByTestId('propose-settlement-btn');
+        await playwrightExpect(settlementBtn).toBeVisible({ timeout: 5_000 });
+        await settlementBtn.click();
+
+        const settlementForm = agentPage.getByTestId('settlement-proposal-form');
+        await playwrightExpect(settlementForm).toBeVisible({ timeout: 5_000 });
+        await agentPage.getByLabel('Settlement Amount').fill('900');
+        await agentPage.getByTestId('settlement-submit-btn').click();
+
+        const approvalBanner = agentPage.getByTestId('write-off-approval-banner');
+        await playwrightExpect(approvalBanner).toContainText('Pending approval', {
+          timeout: 10_000,
+        });
+
+        const dashboardBtn = financePage.getByTestId('nav-cfo-dashboard');
+        await playwrightExpect(dashboardBtn).toBeVisible({ timeout: 10_000 });
+        await dashboardBtn.click();
+
+        const approvalsPanel = financePage.getByTestId('write-off-approvals-panel');
+        await playwrightExpect(approvalsPanel).toBeVisible({ timeout: 10_000 });
+        await playwrightExpect(approvalsPanel).toContainText(companyName, { timeout: 10_000 });
+        await playwrightExpect(approvalsPanel).toContainText('$1,000.00', { timeout: 10_000 });
+
+        const approveBtn = approvalsPanel.getByRole('button', { name: /^Approve$/ });
+        await approveBtn.click();
+
+        await playwrightExpect(approvalsPanel).not.toContainText(companyName, {
+          timeout: 10_000,
+        });
+        await playwrightExpect(approvalsPanel).not.toContainText('$1,000.00', {
+          timeout: 10_000,
+        });
+
+        const refreshedRows = await sql<
+          {
+            case_status: string;
+            invoice_status: string;
+            approval_status: string | null;
+          }[]
+        >`
+          SELECT
+            cc.status AS case_status,
+            i.status AS invoice_status,
+            (
+              SELECT w.status
+              FROM rl_write_off_approvals w
+              WHERE w.collection_case_id = cc.id
+              ORDER BY w.created_at DESC
+              LIMIT 1
+            ) AS approval_status
+          FROM rl_collection_cases cc
+          JOIN rl_invoices i ON i.id = cc.invoice_id
+          WHERE cc.id = ${caseId}
+          LIMIT 1
+        `;
+
+        await playwrightExpect(refreshedRows[0]?.case_status).toBe('written_off');
+        await playwrightExpect(refreshedRows[0]?.invoice_status).toBe('written_off');
+        await playwrightExpect(refreshedRows[0]?.approval_status).toBe('approved');
+      } finally {
+        await agentPage.close();
+        await financePage.close();
       }
     },
     SERVER_READY_TIMEOUT_MS + 120_000,
