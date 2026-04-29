@@ -31,6 +31,7 @@ import { isSuperuser } from './lib/response';
 import { handleUsersRequest } from './api/users';
 import { seedSuperuser } from './seed/superuser';
 import { seedDemoUsers } from './seed/demo-users';
+import { seedDemoData } from './seed/demo-data';
 import { startTaskQueueListener } from './task-queue-listener';
 import { getJwks } from './auth/jwt';
 import { handleHealthRequest } from './api/health';
@@ -122,6 +123,9 @@ await seedSuperuser({ sql }).catch((err) => console.error('[seed] Superuser seed
 
 // Seed demo role accounts (account_manager, supervisor) when running in DEMO_MODE.
 await seedDemoUsers({ sql }).catch((err) => console.error('[seed] Demo user seeding failed:', err));
+
+// Seed rich demo revenue-lifecycle data when running in DEMO_MODE.
+await seedDemoData({ sql }).catch((err) => console.error('[seed] Demo data seeding failed:', err));
 
 // Start the task-queue LISTEN/NOTIFY → WebSocket bridge so the admin monitor
 // receives real-time task status changes without polling.
