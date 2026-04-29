@@ -82,14 +82,16 @@ export function getRpConfig(req: Request): { rpId: string; origin: string } {
     }
   }
 
-  // RP_ID env var pins the relying-party domain independently of the origin.
-  // Set to e.g. "superfield.co" so any *.superfield.co subdomain shares one
-  // credential namespace.  When absent, the hostname from the request is used.
-  const rpId = process.env.RP_ID ?? derivedRpId;
+  // RP_ID + ORIGIN env vars must BOTH be set to take effect.  Requiring both
+  // prevents a half-configured deployment from silently splitting credentials
+  // (only RP_ID set) or accepting the wrong origin (only ORIGIN set).
+  // When absent (the normal demo case), both values are derived from the request.
+  const envRpId = process.env.RP_ID;
+  const envOrigin = process.env.ORIGIN;
+  const useEnvVars = envRpId !== undefined && envOrigin !== undefined;
 
-  // ORIGIN env var overrides the expected origin for cert verification.
-  // When absent (the normal demo case), derive it from the request.
-  const origin = process.env.ORIGIN ?? derivedOrigin;
+  const rpId = useEnvVars ? envRpId : derivedRpId;
+  const origin = useEnvVars ? envOrigin : derivedOrigin;
 
   return { rpId, origin };
 }
