@@ -60,10 +60,24 @@ async function loginViaTestSession(
   }
 
   // Wait until the main nav is rendered (confirms auth passed).
-  // The app renders nav-wiki in both the desktop sidebar and the mobile bottom
-  // nav (one is CSS-hidden per viewport); use .first() to avoid strict-mode
-  // violations when both are in the DOM simultaneously.
-  await expect(page.getByTestId('nav-wiki').first()).toBeVisible({ timeout: 15_000 });
+  // The app renders nav-wiki in both the desktop sidebar (hidden md:flex) and
+  // the mobile bottom nav (flex md:hidden). Exactly one is visible per viewport.
+  // Use .or() so the assertion passes whichever one is currently visible.
+  const wikiNavDesktop = page.getByTestId('nav-wiki').nth(0);
+  const wikiNavMobile = page.getByTestId('nav-wiki').nth(1);
+  await expect(wikiNavDesktop.or(wikiNavMobile)).toBeVisible({ timeout: 15_000 });
+}
+
+/** Click whichever wiki nav button is currently visible. */
+async function clickWikiNav(page: import('@playwright/test').Page): Promise<void> {
+  const wikiNavDesktop = page.getByTestId('nav-wiki').nth(0);
+  const wikiNavMobile = page.getByTestId('nav-wiki').nth(1);
+  // Click the first one that is visible (only one will be visible per viewport).
+  if (await wikiNavDesktop.isVisible()) {
+    await wikiNavDesktop.click();
+  } else {
+    await wikiNavMobile.click();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -76,7 +90,7 @@ test('wiki view renders on the mobile viewport', async ({ page }, testInfo) => {
   await loginViaTestSession(page);
 
   // Tap / click the wiki nav button to activate the wiki view.
-  await page.getByTestId('nav-wiki').first().click();
+  await clickWikiNav(page);
 
   // The wiki-view-page container must be visible.
   await expect(page.getByTestId('wiki-view-page')).toBeVisible({ timeout: 10_000 });
@@ -95,7 +109,7 @@ test('wiki view renders on the mobile viewport', async ({ page }, testInfo) => {
 
 test('version history panel is visible on the mobile viewport', async ({ page }) => {
   await loginViaTestSession(page);
-  await page.getByTestId('nav-wiki').first().click();
+  await clickWikiNav(page);
 
   // The wiki view renders the history panel (sidebar) and a loading spinner
   // initially. Wait for the loading state to resolve.
@@ -114,7 +128,7 @@ test('version history panel is visible on the mobile viewport', async ({ page })
 
 test('citation tap fires the interaction on a touch viewport', async ({ page }, testInfo) => {
   await loginViaTestSession(page);
-  await page.getByTestId('nav-wiki').first().click();
+  await clickWikiNav(page);
 
   // Wait for the wiki view to fully mount.
   await expect(page.getByTestId('wiki-view-page')).toBeVisible({ timeout: 10_000 });
