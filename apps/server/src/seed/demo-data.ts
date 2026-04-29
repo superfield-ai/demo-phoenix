@@ -1155,7 +1155,6 @@ export async function seedDemoData({ sql }: SeedDemoDataOptions): Promise<void> 
   // allowed regardless of status, per the trigger which only guards UPDATEs).
   // ------------------------------------------------------------------
 
-  const todayStr = () => new Date().toISOString().slice(0, 10);
   const daysAgo = (n: number) => {
     const d = new Date();
     d.setDate(d.getDate() - n);
