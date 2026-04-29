@@ -30,10 +30,8 @@ import {
 
 const READ_ROLES = new Set(['collections_agent', 'finance_controller']);
 const WRITE_ROLES = new Set(['collections_agent', 'finance_controller']);
-const PATCHABLE_STATUSES = new Set<Exclude<PaymentPlanStatus, 'cancelled'>>([
-  'breached',
-  'completed',
-]);
+const PATCHABLE_STATUSES = ['breached', 'completed'] as const;
+type PatchablePaymentPlanStatus = (typeof PATCHABLE_STATUSES)[number];
 
 async function resolveActorRole(sql: AppState['sql'], userId: string): Promise<string | null> {
   const rows = await sql<{ properties: { role?: string } }[]>`
@@ -122,12 +120,15 @@ export async function handlePaymentPlansRequest(
     }
 
     const b = body as Record<string, unknown>;
-    if (typeof b.status !== 'string' || !PATCHABLE_STATUSES.has(b.status as PaymentPlanStatus)) {
+    if (
+      typeof b.status !== 'string' ||
+      !PATCHABLE_STATUSES.includes(b.status as PatchablePaymentPlanStatus)
+    ) {
       return json({ error: 'status must be breached or completed' }, 400);
     }
 
     try {
-      const nextStatus = b.status as 'breached' | 'completed';
+      const nextStatus = b.status as PatchablePaymentPlanStatus;
       const plan = await updatePaymentPlanStatus(planId, nextStatus, sql);
       if (!plan) return json({ error: 'Payment plan not found' }, 404);
       return json(plan, 200);
