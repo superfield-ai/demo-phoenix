@@ -77,8 +77,29 @@ function getWalkthroughSteps(role: string | null | undefined, isCfo: boolean | u
   return null;
 }
 
+/**
+ * Returns true when the viewport is narrower than Tailwind's md breakpoint
+ * (768 px). Updates reactively via matchMedia. Used to assign data-testid to
+ * exactly one nav-wiki button so Playwright selectors have a unique target.
+ */
+function useIsMobileViewport(): boolean {
+  const query = typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)') : null;
+  const [isMobile, setIsMobile] = useState(() => query?.matches ?? false);
+
+  React.useEffect(() => {
+    if (!query) return;
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    query.addEventListener('change', handler);
+    setIsMobile(query.matches);
+    return () => query.removeEventListener('change', handler);
+  }, []); // query is stable — computed once at module init, never reassigned
+
+  return isMobile;
+}
+
 function App() {
   const { user, logout, loading } = useAuth();
+  const isMobileViewport = useIsMobileViewport();
   const [activePage, setActivePage] = useState<ActivePage>('pipeline');
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [showWalkthrough, setShowWalkthrough] = useState<boolean | null>(null);
@@ -177,7 +198,7 @@ function App() {
               }}
             />
             <button
-              data-testid="nav-wiki"
+              {...(!isMobileViewport ? { 'data-testid': 'nav-wiki' } : {})}
               title="Wiki"
               onClick={() => setActivePage('wiki')}
               className={`p-3 rounded-xl flex items-center justify-center transition-all ${
@@ -269,7 +290,7 @@ function App() {
           <Users size={20} strokeWidth={2.5} />
         </button>
         <button
-          data-testid="nav-wiki"
+          {...(isMobileViewport ? { 'data-testid': 'nav-wiki' } : {})}
           title="Wiki"
           onClick={() => setActivePage('wiki')}
           className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
