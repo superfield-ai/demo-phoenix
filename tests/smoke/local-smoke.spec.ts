@@ -38,8 +38,11 @@ describe('local demo smoke', () => {
     const users = (await res.json()) as Array<{ role: string }>;
     expect(Array.isArray(users)).toBe(true);
     const roles = users.map((u) => u.role);
+    expect(roles).toContain('sales_rep');
+    expect(roles).toContain('cfo');
+    expect(roles).toContain('collections_agent');
+    expect(roles).toContain('finance_controller');
     expect(roles).toContain('account_manager');
-    expect(roles).toContain('supervisor');
   });
 
   it('login page renders "Sign in as" buttons in DEMO_MODE', async () => {
