@@ -18,6 +18,8 @@
 import type postgres from 'postgres';
 import { sql as defaultSql } from './index';
 
+type Sql = postgres.Sql;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -404,7 +406,7 @@ export async function createPaymentPlan(
     throw new Error('first_due_date cannot be in the past');
   }
 
-  return sqlClient.begin(async (tx: any) => {
+  return sqlClient.begin(async (tx: Sql) => {
     const [caseRow] = await tx<{ id: string }[]>`
       SELECT id
       FROM rl_collection_cases
@@ -475,7 +477,7 @@ export async function updatePaymentPlanStatus(
   status: Exclude<PaymentPlanStatus, 'cancelled'>,
   sqlClient: postgres.Sql = defaultSql,
 ): Promise<PaymentPlanDetail | null> {
-  return sqlClient.begin(async (tx: any) => {
+  return sqlClient.begin(async (tx: Sql) => {
     const detail = await getPaymentPlanDetail(planId, tx);
     if (!detail) return null;
 

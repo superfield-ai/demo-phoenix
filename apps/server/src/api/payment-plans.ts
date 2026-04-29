@@ -22,11 +22,7 @@
 import type { AppState } from '../index';
 import { getCorsHeaders, getAuthenticatedUser } from './auth';
 import { isSuperuser, makeJson } from '../lib/response';
-import {
-  getPaymentPlanDetail,
-  updatePaymentPlanStatus,
-  type PaymentPlanStatus,
-} from 'db/payment-plans';
+import { getPaymentPlanDetail, updatePaymentPlanStatus } from 'db/payment-plans';
 
 const READ_ROLES = new Set(['collections_agent', 'finance_controller']);
 const WRITE_ROLES = new Set(['collections_agent', 'finance_controller']);
