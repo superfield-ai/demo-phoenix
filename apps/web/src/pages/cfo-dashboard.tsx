@@ -1,7 +1,8 @@
 /**
  * @file pages/cfo-dashboard
  *
- * CFO dashboard page — Phase 2 P2-1 (issue #12), P2-4 AR aging (issue #16).
+ * CFO dashboard page — Phase 2 P2-1 (issue #12), P2-4 AR aging (issue #16),
+ * invoice creation and payment recording (issue #47).
  *
  * Renders the executive summary bar at the top and placeholder sections for
  * each chart. Each section has a stable id so the summary bar tiles can
@@ -13,6 +14,7 @@
  * Issues:
  *   https://github.com/superfield-ai/demo-phoenix/issues/12
  *   https://github.com/superfield-ai/demo-phoenix/issues/16
+ *   https://github.com/superfield-ai/demo-phoenix/issues/47
  */
 
 import React from 'react';
@@ -20,6 +22,7 @@ import { CfoSummaryBar } from '../components/CfoSummaryBar';
 import { TierTrendChart } from '../components/TierTrendChart';
 import { ArAgingChart } from '../components/ArAgingChart';
 import { CollectionsPerformancePanel } from '../components/CollectionsPerformancePanel';
+import { InvoicePanel } from '../components/InvoicePanel';
 
 export function CfoDashboardPage() {
   return (
@@ -79,6 +82,14 @@ export function CfoDashboardPage() {
             Collections Performance
           </h2>
           <CollectionsPerformancePanel />
+        </section>
+
+        {/* Section: Invoices — create and payment recording (issue #47) */}
+        <section id="section-invoices" aria-labelledby="section-invoices-heading">
+          <h2 id="section-invoices-heading" className="text-lg font-semibold text-gray-800 mb-4">
+            Invoices
+          </h2>
+          <InvoicePanel />
         </section>
 
         {/* Section: Score model */}

@@ -64,6 +64,7 @@ import { handleBdmCampaignRequest } from './api/bdm-campaign';
 import { handleCampaignSummaryRequest } from './api/campaign-summary';
 import { handleComplianceRequest } from './api/compliance';
 import { handleLegalHoldRequest } from './api/legal-hold';
+import { handleInvoicesRequest } from './api/invoices';
 import { handleLeadsRequest } from './api/leads';
 import { handleNotificationsRequest } from './api/notifications';
 import { handleCfoPortfolioRequest } from './api/cfo-portfolio';
@@ -546,6 +547,17 @@ export default {
     if (url.pathname.startsWith('/api/legal-holds')) {
       const legalHoldRes = await handleLegalHoldRequest(req, url, appState);
       if (legalHoldRes) return withTrace(legalHoldRes);
+    }
+
+    // Invoice creation and payment recording (issue #47).
+    // POST /api/invoices                   — create invoice
+    // GET  /api/invoices                   — list invoices
+    // GET  /api/invoices/:id               — get single invoice
+    // POST /api/invoices/:id/payments      — record payment
+    // GET  /api/invoices/:id/payments      — list payments
+    if (url.pathname.startsWith('/api/invoices')) {
+      const invoicesRes = await handleInvoicesRequest(req, url, appState);
+      if (invoicesRes) return withTrace(invoicesRes);
     }
 
     // Serve static assets. import.meta.dir is the compiled bundle dir (/app/dist)
