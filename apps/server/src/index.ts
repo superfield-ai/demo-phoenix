@@ -65,6 +65,7 @@ import { handleCampaignSummaryRequest } from './api/campaign-summary';
 import { handleComplianceRequest } from './api/compliance';
 import { handleLegalHoldRequest } from './api/legal-hold';
 import { handleInvoicesRequest } from './api/invoices';
+import { handleDunningRequest } from './api/dunning';
 import { handleLeadsRequest } from './api/leads';
 import { handleNotificationsRequest } from './api/notifications';
 import { handleCfoPortfolioRequest } from './api/cfo-portfolio';
@@ -547,6 +548,14 @@ export default {
     if (url.pathname.startsWith('/api/legal-holds')) {
       const legalHoldRes = await handleLegalHoldRequest(req, url, appState);
       if (legalHoldRes) return withTrace(legalHoldRes);
+    }
+
+    // Dunning timeline (issue #48).
+    // GET /api/invoices/:id/dunning-actions — list dunning actions for an invoice
+    // Must be checked before the generic /api/invoices handler.
+    if (url.pathname.match(/^\/api\/invoices\/[^/]+\/dunning-actions$/)) {
+      const dunningRes = await handleDunningRequest(req, url, appState);
+      if (dunningRes) return withTrace(dunningRes);
     }
 
     // Invoice creation and payment recording (issue #47).

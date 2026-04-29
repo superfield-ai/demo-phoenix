@@ -57,6 +57,16 @@ interface Payment {
   created_at: string;
 }
 
+interface DunningAction {
+  id: string;
+  invoice_id: string;
+  action_type: string;
+  scheduled_at: string | null;
+  sent_at: string | null;
+  response: string | null;
+  created_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -81,6 +91,13 @@ const STATUS_COLORS: Record<InvoiceStatus, string> = {
   paid: 'bg-green-100 text-green-700',
   settled: 'bg-emerald-100 text-emerald-700',
   written_off: 'bg-gray-200 text-gray-500',
+};
+
+const DUNNING_ACTION_LABELS: Record<string, string> = {
+  reminder_d1: 'D+1 Friendly Reminder',
+  second_notice_d7: 'D+7 Second Notice',
+  firm_notice_d14: 'D+14 Firm Notice + AM Alert',
+  collection_d30: 'D+30 Collection Case Opened',
 };
 
 function fmt(amount: number, currency = 'USD'): string {
@@ -405,6 +422,8 @@ function InvoiceDetail({
   const [invoice, setInvoice] = useState(initialInvoice);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(true);
+  const [dunningActions, setDunningActions] = useState<DunningAction[]>([]);
+  const [loadingDunning, setLoadingDunning] = useState(true);
 
   const loadPayments = useCallback(async () => {
     setLoadingPayments(true);
@@ -419,9 +438,25 @@ function InvoiceDetail({
     }
   }, [invoice.id]);
 
+  const loadDunningActions = useCallback(async () => {
+    setLoadingDunning(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/dunning-actions`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { dunning_actions: DunningAction[] };
+        setDunningActions(data.dunning_actions);
+      }
+    } finally {
+      setLoadingDunning(false);
+    }
+  }, [invoice.id]);
+
   useEffect(() => {
     loadPayments();
-  }, [loadPayments]);
+    loadDunningActions();
+  }, [loadPayments, loadDunningActions]);
 
   async function handlePaymentRecorded(payment: Payment) {
     // Refresh the invoice to get updated status.
@@ -514,6 +549,38 @@ function InvoiceDetail({
               </li>
             ))}
           </ul>
+        )}
+      </div>
+
+      {/* Dunning timeline panel */}
+      <div className="rounded-xl border border-gray-200 bg-white" data-testid="dunning-timeline">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h4 className="text-sm font-semibold text-gray-800">Dunning Timeline</h4>
+        </div>
+
+        {loadingDunning ? (
+          <div className="px-6 py-4">
+            <SkeletonRows count={2} />
+          </div>
+        ) : dunningActions.length === 0 ? (
+          <div className="px-6 py-8 text-center text-sm text-gray-400">No dunning actions yet.</div>
+        ) : (
+          <ol className="divide-y divide-gray-100" data-testid="dunning-action-list">
+            {dunningActions.map((action) => (
+              <li key={action.id} className="px-6 py-3 flex items-start gap-3">
+                <div className="mt-0.5 h-2 w-2 rounded-full bg-indigo-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">
+                    {DUNNING_ACTION_LABELS[action.action_type] ?? action.action_type}
+                  </p>
+                  <div className="mt-0.5 flex flex-wrap gap-x-4 text-xs text-gray-500">
+                    {action.scheduled_at && <span>Scheduled: {fmtDate(action.scheduled_at)}</span>}
+                    {action.sent_at && <span>Sent: {fmtDate(action.sent_at)}</span>}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
         )}
       </div>
     </div>
