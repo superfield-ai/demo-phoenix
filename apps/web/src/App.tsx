@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './components/Login';
-import { Settings, User, Users, KanbanSquare } from 'lucide-react';
+import { Settings, User, Users, KanbanSquare, TrendingUp } from 'lucide-react';
 import { MobileInstallPage } from './pages/mobile-install';
 import { SettingsPage } from './pages/settings';
 import { LeadDetailPage, LeadQueuePage } from './pages/lead-detail';
 import { PipelineBoardPage } from './pages/pipeline-board';
+import { CfoPortfolioPage } from './pages/cfo-portfolio';
 import { usePlatform } from './hooks/use-platform';
 import { isDismissalActive, DISMISSED_KEY } from './components/pwa/install-prompt';
 import { NotificationBell } from './components/NotificationBell';
 
-type ActivePage = 'pipeline' | 'leads' | 'settings';
+type ActivePage = 'pipeline' | 'leads' | 'settings' | 'cfo-portfolio';
 
 /** Returns true when the visitor is on a mobile platform (android or ios) */
 function isMobilePlatform(os: string): boolean {
@@ -79,6 +80,9 @@ function App() {
       }
       return <LeadQueuePage onSelectLead={(id) => setSelectedLeadId(id)} />;
     }
+    if (activePage === 'cfo-portfolio') {
+      return <CfoPortfolioPage />;
+    }
     return <SettingsPage />;
   }
 
@@ -119,6 +123,19 @@ function App() {
                 setSelectedLeadId(prospectId);
               }}
             />
+            {(user?.isCfo || user?.isSuperadmin) && (
+              <button
+                title="CFO Portfolio"
+                onClick={() => setActivePage('cfo-portfolio')}
+                className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                  activePage === 'cfo-portfolio'
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+                }`}
+              >
+                <TrendingUp size={20} strokeWidth={2.5} />
+              </button>
+            )}
             <button
               title="Settings"
               onClick={() => setActivePage('settings')}

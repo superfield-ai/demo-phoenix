@@ -9,6 +9,8 @@ export interface UserAccessFlags {
   isComplianceOfficer: boolean;
   /** True when the user has role 'bdm' (Business Development Manager). */
   isBdm: boolean;
+  /** True when the user has role 'cfo'. */
+  isCfo: boolean;
   role: string | null;
 }
 
@@ -29,6 +31,7 @@ export async function getUserAccessFlags(userId: string, sql: Sql): Promise<User
       isCrmAdmin: true,
       isComplianceOfficer: true,
       isBdm: false,
+      isCfo: false,
       role: 'superuser',
     };
   }
@@ -47,6 +50,7 @@ export async function getUserAccessFlags(userId: string, sql: Sql): Promise<User
     isCrmAdmin: role === 'crm_admin',
     isComplianceOfficer: role === 'compliance_officer',
     isBdm: role === 'bdm',
+    isCfo: role === 'cfo',
     role,
   };
 }
