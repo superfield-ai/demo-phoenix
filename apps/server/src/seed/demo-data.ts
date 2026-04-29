@@ -11,18 +11,23 @@
  *   - 20+ rl_customers with health_score spread (healthy, at-risk, churned)
  *   - rl_deals in multiple pipeline stages
  *   - 40+ rl_invoices spanning all invoice_status values with aging buckets
- *   - rl_dunning_actions for overdue and in_collection invoices
- *   - rl_collection_cases in all statuses
+ *   - rl_dunning_actions: D+1/D+7/D+14/D+30 sequences with realistic sent_at timestamps
+ *   - rl_collection_cases in all statuses, each with 3+ rl_contact_logs
  *   - rl_payment_plans in all statuses (current, breached, completed, cancelled)
+ *   - rl_write_off_approvals: pending, approved, rejected
+ *   - rl_interventions: resolved (5), in_progress (2), open (1)
+ *   - rl_customer_health_scores: 4 open alerts at 1/3/7/14 days
  *   - rl_notifications (new_lead + score_drop) for demo sales rep — mix of read/unread
  *   - rl_macro_indicators for 8 quarters
  *   - rl_industry_benchmarks for all seeded SIC codes
+ *   - KYC manual review: 3 prospects with distinct failure reasons
  *
  * All rows use deterministic IDs derived from a stable namespace via a simple
  * string-keyed map so ON CONFLICT DO NOTHING ensures idempotency on re-runs.
  *
  * Canonical docs: docs/prd.md
  * Issue: https://github.com/superfield-ai/demo-phoenix/issues/46
+ * Issue: https://github.com/superfield-ai/demo-phoenix/issues/58
  */
 
 import type { sql as SqlPool } from 'db';
@@ -1436,6 +1441,429 @@ export async function seedDemoData({ sql }: SeedDemoDataOptions): Promise<void> 
     `;
   }
   log('info', '[seed] Notifications done.');
+
+  // ------------------------------------------------------------------
+  // 15. Contact logs — 3+ per collection case (call, email, portal)
+  // ------------------------------------------------------------------
+  const contactOutcomes = {
+    call: [
+      'reached_payment_promise',
+      'no_answer',
+      'left_voicemail',
+      'disputed',
+      'partial_commitment',
+    ],
+    email: [
+      'opened_no_reply',
+      'bounced',
+      'replied_promise_to_pay',
+      'out_of_office',
+      'payment_received',
+    ],
+    portal: ['viewed', 'message_sent', 'payment_initiated', 'no_activity', 'document_uploaded'],
+  } as const;
+
+  const contactTypes = ['call', 'email', 'portal'] as const;
+
+  for (let i = 0; i < collectionCaseIds.length; i++) {
+    const caseId = collectionCaseIds[i];
+    // Insert at least 3 contact log entries per case with different types
+    for (let j = 0; j < 3; j++) {
+      const ctype = contactTypes[j % contactTypes.length];
+      const outcomes = contactOutcomes[ctype];
+      const outcome = outcomes[i % outcomes.length];
+      const daysBack = 25 - j * 5; // stagger contacts over time
+      await sql`
+        INSERT INTO rl_contact_logs
+          (id, collection_case_id, agent_id, contact_type, outcome, notes, contacted_at)
+        VALUES (
+          ${demoId(`contact-log-${i}-${j}`)},
+          ${caseId},
+          ${collectionsAgentId},
+          ${ctype},
+          ${outcome},
+          ${`Attempt ${j + 1}: ${outcome.replace(/_/g, ' ')}. Case #${i + 1} follow-up.`},
+          ${new Date(Date.now() - daysBack * 24 * 3600 * 1000).toISOString()}
+        )
+        ON CONFLICT (id) DO NOTHING
+      `;
+    }
+    // Add a 4th log to some cases (variety)
+    if (i % 2 === 0) {
+      const ctype = contactTypes[(i + 1) % contactTypes.length];
+      await sql`
+        INSERT INTO rl_contact_logs
+          (id, collection_case_id, agent_id, contact_type, outcome, notes, contacted_at)
+        VALUES (
+          ${demoId(`contact-log-${i}-3`)},
+          ${caseId},
+          ${collectionsAgentId},
+          ${ctype},
+          ${'escalated_to_manager'},
+          ${'Escalated after no response. Manager notified.'},
+          ${new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString()}
+        )
+        ON CONFLICT (id) DO NOTHING
+      `;
+    }
+  }
+  log('info', '[seed] Contact logs done.');
+
+  // ------------------------------------------------------------------
+  // 16. Enhanced dunning actions — D+1/D+7/D+14/D+30 sequences
+  //     Replace basic dunning with rich sequences per invoice
+  // ------------------------------------------------------------------
+  const dunningSequence = [
+    { dayOffset: 1, action_type: 'email_reminder', response: 'no_response' },
+    { dayOffset: 7, action_type: 'email_reminder', response: 'no_response' },
+    { dayOffset: 14, action_type: 'sms_reminder', response: 'opened_no_action' },
+    { dayOffset: 30, action_type: 'legal_notice', response: 'disputed' },
+  ] as const;
+
+  // Add dunning sequences to first 4 overdue invoices (D+1 through D+30 pattern)
+  for (let i = 0; i < 4; i++) {
+    const invId = demoId(`inv-overdue-${i}`);
+    const overdueDate = new Date(Date.now() - overdueSpec[i].days * 24 * 3600 * 1000);
+    for (const step of dunningSequence) {
+      const scheduledAt = new Date(overdueDate.getTime() + step.dayOffset * 24 * 3600 * 1000);
+      const sentAt = new Date(scheduledAt.getTime() + 2 * 3600 * 1000); // sent 2h after scheduled
+      // Only include sent_at if the step date is in the past
+      const isPast = sentAt.getTime() < Date.now();
+      await sql`
+        INSERT INTO rl_dunning_actions
+          (id, invoice_id, action_type, scheduled_at, sent_at, response)
+        VALUES (
+          ${demoId(`dunning-seq-${i}-d${step.dayOffset}`)},
+          ${invId},
+          ${step.action_type},
+          ${scheduledAt.toISOString()},
+          ${isPast ? sentAt.toISOString() : null},
+          ${isPast ? step.response : null}
+        )
+        ON CONFLICT (id) DO NOTHING
+      `;
+    }
+  }
+  log('info', '[seed] Enhanced dunning sequences done.');
+
+  // ------------------------------------------------------------------
+  // 17. Write-off approvals — pending (above threshold), approved, rejected
+  // ------------------------------------------------------------------
+  // Use first 3 collection cases
+  const writeOffSpecs = [
+    {
+      key: 'writeoff-pending',
+      caseIdx: 0,
+      status: 'pending_approval',
+      settlement: 4500,
+      writeoff: 7500,
+      notes:
+        'Customer has been unresponsive for 90+ days. Recommend settlement at 37.5% of face value.',
+      review_notes: null,
+    },
+    {
+      key: 'writeoff-approved',
+      caseIdx: 1,
+      status: 'approved',
+      settlement: 6000,
+      writeoff: 6000,
+      notes: 'Customer agreed to partial settlement after negotiation.',
+      review_notes: 'Approved. Settlement is above 40% threshold. Case closed.',
+    },
+    {
+      key: 'writeoff-rejected',
+      caseIdx: 2,
+      status: 'rejected',
+      settlement: 2000,
+      writeoff: 10000,
+      notes: 'Proposed settlement far below threshold — customer at 16% of face value.',
+      review_notes: 'Rejected. Settlement is below minimum 30% threshold. Escalate to legal.',
+    },
+  ] as const;
+
+  // Get FC user id
+  const fcRows = await sql<{ id: string }[]>`
+    SELECT id FROM entities
+    WHERE type = 'user' AND properties->>'role' = 'finance_controller'
+    LIMIT 1
+  `;
+  const financeControllerId = fcRows[0]?.id ?? 'demo-finance-controller';
+
+  for (const spec of writeOffSpecs) {
+    const caseId = collectionCaseIds[spec.caseIdx];
+    const invoiceId = inCollectionIds[spec.caseIdx];
+    const customerId = CUSTOMERS[spec.caseIdx % CUSTOMERS.length].id;
+    const isReviewed = spec.status !== 'pending_approval';
+    await sql`
+      INSERT INTO rl_write_off_approvals
+        (id, collection_case_id, invoice_id, customer_id,
+         proposed_by, reviewed_by, settlement_amount, implied_write_off_amount,
+         status, notes, review_notes, reviewed_at)
+      VALUES (
+        ${demoId(spec.key)},
+        ${caseId},
+        ${invoiceId},
+        ${customerId},
+        ${collectionsAgentId},
+        ${isReviewed ? financeControllerId : null},
+        ${spec.settlement},
+        ${spec.writeoff},
+        ${spec.status},
+        ${spec.notes},
+        ${spec.review_notes},
+        ${isReviewed ? new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString() : null}
+      )
+      ON CONFLICT (id) DO NOTHING
+    `;
+  }
+  log('info', '[seed] Write-off approvals done.');
+
+  // ------------------------------------------------------------------
+  // 18. Interventions — 5 resolved, 2 in_progress, 1 open
+  // ------------------------------------------------------------------
+  const interventionSpecs = [
+    // Resolved (5)
+    {
+      key: 'interv-resolved-1',
+      custIdx: 8, // c-risk-1 Flynt Industries
+      trigger_type: 'health_score_drop',
+      playbook: 'at_risk_outreach',
+      status: 'resolved',
+      outcome: 'Customer confirmed continued subscription after executive call.',
+    },
+    {
+      key: 'interv-resolved-2',
+      custIdx: 9, // c-risk-2 Beneke Fabricators
+      trigger_type: 'overdue_invoice',
+      playbook: 'invoice_recovery',
+      status: 'resolved',
+      outcome: 'Payment plan established. First installment received.',
+    },
+    {
+      key: 'interv-resolved-3',
+      custIdx: 10, // c-risk-3 Pied Piper Data
+      trigger_type: 'health_score_drop',
+      playbook: 'at_risk_outreach',
+      status: 'resolved',
+      outcome: 'Root cause was a billing contact change. Updated and re-sent invoices.',
+    },
+    {
+      key: 'interv-resolved-4',
+      custIdx: 11, // c-risk-4 Wernham Hogg UK
+      trigger_type: 'payment_plan_breach',
+      playbook: 'breach_recovery',
+      status: 'resolved',
+      outcome: 'Missed installment recovered. Plan back on track.',
+    },
+    {
+      key: 'interv-resolved-5',
+      custIdx: 12, // c-risk-5 Pendant Publishing
+      trigger_type: 'health_score_drop',
+      playbook: 'executive_escalation',
+      status: 'resolved',
+      outcome: 'Executive sponsor engaged. Customer renewed annual contract.',
+    },
+    // In-progress (2)
+    {
+      key: 'interv-inprogress-1',
+      custIdx: 13, // c-risk-6 Strickland Propane
+      trigger_type: 'health_score_drop',
+      playbook: 'at_risk_outreach',
+      status: 'in_progress',
+      outcome: null,
+    },
+    {
+      key: 'interv-inprogress-2',
+      custIdx: 14, // c-risk-7 Hamlin Hamlin McGill
+      trigger_type: 'overdue_invoice',
+      playbook: 'invoice_recovery',
+      status: 'in_progress',
+      outcome: null,
+    },
+    // Open (1)
+    {
+      key: 'interv-open-1',
+      custIdx: 15, // c-churn-1 Tex Mex Holdings
+      trigger_type: 'health_score_drop',
+      playbook: 'at_risk_outreach',
+      status: 'open',
+      outcome: null,
+    },
+  ] as const;
+
+  for (const spec of interventionSpecs) {
+    const custId = CUSTOMERS[spec.custIdx % CUSTOMERS.length].id;
+    const isResolved = spec.status === 'resolved';
+    await sql`
+      INSERT INTO rl_interventions
+        (id, customer_id, trigger_type, playbook, assigned_to, status, outcome, resolved_at)
+      VALUES (
+        ${demoId(spec.key)},
+        ${custId},
+        ${spec.trigger_type},
+        ${spec.playbook},
+        ${accountManagerId},
+        ${spec.status},
+        ${spec.outcome},
+        ${isResolved ? new Date(Date.now() - Math.floor(Math.random() * 14 + 1) * 24 * 3600 * 1000).toISOString() : null}
+      )
+      ON CONFLICT (id) DO NOTHING
+    `;
+  }
+  log('info', '[seed] Interventions done.');
+
+  // ------------------------------------------------------------------
+  // 19. Customer health scores (rl_customer_health_scores)
+  //     4 open alerts at ages 1, 3, 7, 14 days
+  //     The 14-day alert has NO intervention (triggers escalation demo)
+  //     + 2 additional alerts with in-progress interventions
+  // ------------------------------------------------------------------
+  const healthAlertSpecs = [
+    // 4 open health alerts at 1, 3, 7, 14 days ago
+    {
+      key: 'health-alert-1d',
+      custIdx: 13,
+      daysAgoVal: 1,
+      score: 35,
+      signal: 0.8,
+      breach: 0.4,
+      escalation: 0.0,
+    },
+    {
+      key: 'health-alert-3d',
+      custIdx: 14,
+      daysAgoVal: 3,
+      score: 28,
+      signal: 0.9,
+      breach: 0.5,
+      escalation: 0.1,
+    },
+    {
+      key: 'health-alert-7d',
+      custIdx: 15,
+      daysAgoVal: 7,
+      score: 22,
+      signal: 0.95,
+      breach: 0.7,
+      escalation: 0.3,
+    },
+    // 14-day alert: no intervention — this is the escalation demo case
+    {
+      key: 'health-alert-14d',
+      custIdx: 16,
+      daysAgoVal: 14,
+      score: 15,
+      signal: 1.0,
+      breach: 0.9,
+      escalation: 0.8,
+    },
+    // 2 additional alerts for in-progress intervention customers
+    {
+      key: 'health-alert-am1',
+      custIdx: 8,
+      daysAgoVal: 5,
+      score: 42,
+      signal: 0.6,
+      breach: 0.3,
+      escalation: 0.0,
+    },
+    {
+      key: 'health-alert-am2',
+      custIdx: 9,
+      daysAgoVal: 2,
+      score: 38,
+      signal: 0.7,
+      breach: 0.4,
+      escalation: 0.1,
+    },
+  ] as const;
+
+  for (const spec of healthAlertSpecs) {
+    const custId = CUSTOMERS[spec.custIdx % CUSTOMERS.length].id;
+    const scoreDate = new Date(Date.now() - spec.daysAgoVal * 24 * 3600 * 1000);
+    await sql`
+      INSERT INTO rl_customer_health_scores
+        (id, customer_id, score_date, score,
+         days_overdue_signal, breach_count_signal, escalation_signal,
+         days_overdue_value, breach_count_value, escalation_level_value)
+      VALUES (
+        ${demoId(spec.key)},
+        ${custId},
+        ${scoreDate.toISOString().slice(0, 10)},
+        ${spec.score},
+        ${spec.signal},
+        ${spec.breach},
+        ${spec.escalation},
+        ${Math.round(spec.signal * 60)},
+        ${Math.round(spec.breach * 5)},
+        ${Math.round(spec.escalation * 3)}
+      )
+      ON CONFLICT (id) DO NOTHING
+    `;
+  }
+  log('info', '[seed] Customer health scores (alerts) done.');
+
+  // ------------------------------------------------------------------
+  // 20. KYC manual review records — 3 prospects with distinct failure reasons
+  //     The kyc_manual_review stage prospects already exist (p-kycm-1/2/3)
+  //     We update their KYC records to have distinct failure reasons stored in notes
+  // ------------------------------------------------------------------
+  const kycManualSpecs = [
+    {
+      prospectKey: 'p-kycm-1', // Wolfram Holdings
+      failure_reason: 'identity_mismatch',
+      notes:
+        'Registered director name does not match submitted ID documents. Requires manual verification by compliance officer.',
+    },
+    {
+      prospectKey: 'p-kycm-2', // Rekall Robotics
+      failure_reason: 'insufficient_data',
+      notes:
+        'Insufficient financial documentation provided. Annual accounts are >24 months old. Request updated statements.',
+    },
+    {
+      prospectKey: 'p-kycm-3', // Omni Consumer Products
+      failure_reason: 'failed_credit_check',
+      notes:
+        'Credit bureau check returned adverse finding: 2 CCJs in last 36 months. Manual review required before onboarding.',
+    },
+  ] as const;
+
+  // The KYC records for these prospects were already inserted in step 5 with status 'verified'.
+  // We need to update them to reflect their manual_review status. We use an UPSERT approach:
+  // delete by key and re-insert with correct status + notes, or add separate manual_review records.
+  // Since ON CONFLICT (prospect_id) WHERE status != 'archived' prevents duplicate non-archived records,
+  // we insert with a distinct ID suffix to represent the review flag.
+  // Instead we seed a separate notes-carrying KYC record for the manual review.
+  for (const spec of kycManualSpecs) {
+    const pid = demoId(spec.prospectKey);
+    // First, archive the auto-generated KYC record for this prospect to allow inserting manual review one
+    await sql`
+      UPDATE rl_kyc_records
+      SET verification_status = 'archived', updated_at = CURRENT_TIMESTAMP
+      WHERE prospect_id = ${pid}
+        AND id = ${demoId(`kyc-${pid}`)}
+        AND verification_status != 'archived'
+    `;
+    // Now insert a 'failed' KYC record with the specific failure reason in the notes column
+    await sql`
+      INSERT INTO rl_kyc_records
+        (id, prospect_id, verification_status, credit_score, funding_stage,
+         annual_revenue_est, debt_load_est, checked_at)
+      VALUES (
+        ${demoId(`kyc-manual-${spec.prospectKey}`)},
+        ${pid},
+        ${'failed'},
+        ${480 + kycManualSpecs.indexOf(spec) * 30},
+        ${'series-a'},
+        ${parseFloat((1000000 + kycManualSpecs.indexOf(spec) * 500000).toFixed(2))},
+        ${parseFloat((100000 + kycManualSpecs.indexOf(spec) * 50000).toFixed(2))},
+        ${new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString()}
+      )
+      ON CONFLICT (id) DO NOTHING
+    `;
+  }
+  log('info', '[seed] KYC manual review records done.');
 
   log('info', '[seed] Demo data seeding complete.');
 }
