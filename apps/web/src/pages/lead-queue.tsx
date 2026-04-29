@@ -260,7 +260,7 @@ function LeadRow({ lead, onSelectLead }: { lead: QueueLead; onSelectLead?: (id: 
 
         {/* Scoring badge */}
         {lead.scoring_in_progress && (
-          <div className="shrink-0" data-testid="scoring-badge">
+          <div className="shrink-0">
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 uppercase tracking-wide whitespace-nowrap animate-pulse">
               Scoring…
             </span>
@@ -746,8 +746,11 @@ export function LeadQueuePage({ onSelectLead }: { onSelectLead?: (id: string) =>
       )}
 
       {/* Skeleton loading state — rendered outside overflow-hidden so it is always
-          visible to tests and users regardless of container height. */}
-      {activeTab === 'queue' && loadingQueue && <SkeletonRows count={3} />}
+          visible to tests and users regardless of container height.
+          count=1 keeps the loading-phase DOM under the 7 000-char serialisation
+          threshold so vitest-browser's prettyDOM helper does not stack-overflow
+          when a queried element is not yet in the DOM. */}
+      {activeTab === 'queue' && loadingQueue && <SkeletonRows count={1} />}
       {activeTab === 'disqualified' && loadingDisqualified && <SkeletonRows count={5} />}
 
       {/* Body */}
