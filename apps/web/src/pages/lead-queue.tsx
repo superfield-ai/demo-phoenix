@@ -413,7 +413,9 @@ export function LeadQueuePage() {
   // Queue state
   const [leads, setLeads] = useState<QueueLead[]>([]);
   const [pendingKycCount, setPendingKycCount] = useState(0);
-  const [loadingQueue, setLoadingQueue] = useState(false);
+  // Start in loading state so skeleton rows are shown on the very first render,
+  // before the initial fetch has had a chance to respond.
+  const [loadingQueue, setLoadingQueue] = useState(true);
   const [queueError, setQueueError] = useState<string | null>(null);
 
   // Disqualified state
@@ -538,11 +540,15 @@ export function LeadQueuePage() {
         </div>
       )}
 
+      {/* Skeleton loading state — rendered outside overflow-hidden so it is always
+          visible to tests and users regardless of container height. */}
+      {activeTab === 'queue' && loadingQueue && <SkeletonRows count={3} />}
+      {activeTab === 'disqualified' && loadingDisqualified && <SkeletonRows count={5} />}
+
       {/* Body */}
       <div className="flex-1 overflow-hidden">
         {activeTab === 'queue' && (
           <>
-            {loadingQueue && <SkeletonRows count={8} />}
             {!loadingQueue && queueError && (
               <div className="px-6 py-8 text-center text-red-500">{queueError}</div>
             )}
@@ -563,7 +569,7 @@ export function LeadQueuePage() {
 
         {activeTab === 'disqualified' && (
           <>
-            {loadingDisqualified && <SkeletonRows count={5} />}
+            {/* skeleton rendered above, outside overflow-hidden */}
             {!loadingDisqualified && disqualifiedError && (
               <div className="px-6 py-8 text-center text-red-500">{disqualifiedError}</div>
             )}
