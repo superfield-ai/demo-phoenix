@@ -69,6 +69,7 @@ import { handleInvoicesRequest } from './api/invoices';
 import { handleDunningRequest } from './api/dunning';
 import { handlePaymentPlansRequest } from './api/payment-plans';
 import { handleLeadsRequest } from './api/leads';
+import { handleKycRequest } from './api/kyc';
 import { handleNotificationsRequest } from './api/notifications';
 import { handleCfoPortfolioRequest } from './api/cfo-portfolio';
 import { handleCfoScheduledReportsRequest } from './api/cfo-scheduled-reports';
@@ -523,6 +524,15 @@ export default {
     if (url.pathname.startsWith('/api/leads')) {
       const leadsRes = await handleLeadsRequest(req, url, appState);
       if (leadsRes) return withTrace(leadsRes);
+    }
+
+    // Phase 1 lead qualification — KYC re-trigger and manual review queue (issue #52).
+    // POST  /api/kyc/:prospect_id/trigger     — initiate or re-trigger a KYC check
+    // GET   /api/kyc/manual-review            — list prospects in kyc_manual_review stage
+    // PATCH /api/kyc/:prospect_id/review      — clear manual_review flag or reject
+    if (url.pathname.startsWith('/api/kyc')) {
+      const kycRes = await handleKycRequest(req, url, appState);
+      if (kycRes) return withTrace(kycRes);
     }
 
     // Phase 1 in-app notifications (issue #11).

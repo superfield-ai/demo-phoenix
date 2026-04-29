@@ -422,6 +422,7 @@ function KycSummaryPanel({
       {isManualReview && (
         <button
           type="button"
+          data-testid="kyc-retrigger-btn"
           onClick={onRetrigger}
           className="flex items-center gap-2 text-xs font-medium text-indigo-600 hover:text-indigo-700 mt-1"
         >
@@ -817,10 +818,25 @@ export function LeadDetailPage({ prospectId, onBack }: LeadDetailPageProps) {
     await load();
   }, [load]);
 
-  const handleRetriggerKyc = useCallback(() => {
-    // Placeholder: in a future phase this would POST to a KYC re-trigger endpoint.
-    alert('KYC re-trigger is not yet wired to a backend endpoint in this phase.');
-  }, []);
+  const handleRetriggerKyc = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/kyc/${prospectId}/trigger`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const msg = (body as { error?: string }).error ?? 'KYC re-trigger failed';
+        alert(msg);
+        return;
+      }
+      // Reload lead detail to reflect updated KYC status.
+      await load();
+    } catch {
+      alert('KYC re-trigger request failed. Please try again.');
+    }
+  }, [prospectId, load]);
 
   if (loading) {
     return (

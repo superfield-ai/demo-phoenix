@@ -10,6 +10,7 @@ import {
   HelpCircle,
   BookOpen,
   Briefcase,
+  ShieldCheck,
 } from 'lucide-react';
 import { MobileInstallPage } from './pages/mobile-install';
 import { SettingsPage } from './pages/settings';
@@ -21,6 +22,7 @@ import { CfoDashboardPage } from './pages/cfo-dashboard';
 import { WikiViewPage } from './pages/wiki-view';
 import { CollectionQueuePage } from './pages/collection-queue';
 import { CollectionCaseDetailPage } from './pages/collection-case-detail';
+import { KycManualReviewPage } from './pages/kyc-manual-review';
 import { usePlatform } from './hooks/use-platform';
 import { isDismissalActive, DISMISSED_KEY } from './components/pwa/install-prompt';
 import { NotificationBell } from './components/NotificationBell';
@@ -38,7 +40,8 @@ type ActivePage =
   | 'cfo-portfolio'
   | 'cfo-dashboard'
   | 'wiki'
-  | 'collection-queue';
+  | 'collection-queue'
+  | 'kyc-review';
 
 /** Returns true when the visitor is on a mobile platform (android or ios) */
 function isMobilePlatform(os: string): boolean {
@@ -178,6 +181,9 @@ function App() {
       }
       return <CollectionQueuePage onSelectCase={(id) => setSelectedCaseId(id)} />;
     }
+    if (activePage === 'kyc-review') {
+      return <KycManualReviewPage />;
+    }
     return <SettingsPage />;
   }
 
@@ -277,6 +283,19 @@ function App() {
                 }`}
               >
                 <TrendingUp size={20} strokeWidth={2.5} />
+              </button>
+            )}
+            {user?.role !== 'sales_rep' && (
+              <button
+                title="KYC Review Queue"
+                onClick={() => setActivePage('kyc-review')}
+                className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                  activePage === 'kyc-review'
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+                }`}
+              >
+                <ShieldCheck size={20} strokeWidth={2.5} />
               </button>
             )}
             {/* Show tour — only for roles that have a walkthrough */}
