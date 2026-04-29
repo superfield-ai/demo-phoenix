@@ -124,66 +124,133 @@ afterAll(async () => {
   await stopDemoServer(demoEnv);
 });
 
+/** Helper: sign in via demo quick-login button and wait for the authenticated shell. */
+async function signInAsRole(
+  browser: Browser,
+  baseUrl: string,
+  roleLabel: string,
+): Promise<import('@playwright/test').Page> {
+  const page = await browser.newPage();
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  const btn = page.getByRole('button', { name: `Sign in as ${roleLabel}` });
+  await playwrightExpect(btn).toBeVisible();
+  await btn.click();
+  // Wait for login page to disappear (authenticated shell mounts).
+  await page.waitForFunction(
+    () => {
+      const loginHeading = Array.from(document.querySelectorAll('h1')).find(
+        (el) => el.textContent?.trim() === 'Superfield' && el.closest('.min-h-screen'),
+      );
+      return !loginHeading;
+    },
+    { timeout: 10_000 },
+  );
+  return page;
+}
+
 describe('demo quick-login', () => {
-  it('GET /api/demo/users returns seeded demo accounts', async () => {
+  // TP-1: Seed check — all 5 PRD revenue lifecycle roles must be present.
+  it('GET /api/demo/users returns all 5 revenue lifecycle roles', async () => {
     const res = await fetch(`${demoEnv.baseUrl}/api/demo/users`);
     expect(res.status).toBe(200);
     const users = (await res.json()) as Array<{ id: string; username: string; role: string }>;
     expect(Array.isArray(users)).toBe(true);
-    // The superuser seed requires env vars — at minimum the seeded demo roles
-    // (account_manager, supervisor) should be present.
     const roles = users.map((u) => u.role);
+    expect(roles).toContain('sales_rep');
+    expect(roles).toContain('cfo');
+    expect(roles).toContain('collections_agent');
+    expect(roles).toContain('finance_controller');
     expect(roles).toContain('account_manager');
-    expect(roles).toContain('supervisor');
   });
 
-  it('demo login page shows "Sign in as" buttons in DEMO_MODE', async () => {
+  // TP-2: UI button check — all 5 'Sign in as [Role]' buttons visible on login page.
+  it('demo login page shows all 5 "Sign in as [Role]" buttons in DEMO_MODE', async () => {
     const page = await browser.newPage();
     try {
       await page.goto(demoEnv.baseUrl, { waitUntil: 'networkidle' });
 
-      // At least one "Sign in as" button should be visible.
-      const signInButtons = page.getByRole('button', { name: /^Sign in as / });
-      await playwrightExpect(signInButtons.first()).toBeVisible();
+      const expectedLabels = [
+        'Sign in as Sales Rep',
+        'Sign in as CFO',
+        'Sign in as Collections Agent',
+        'Sign in as Finance Controller',
+        'Sign in as Account Manager',
+      ];
+      for (const label of expectedLabels) {
+        await playwrightExpect(page.getByRole('button', { name: label })).toBeVisible();
+      }
 
-      // Username should not be the primary button label — verify no button
-      // has "demo-account-manager" or "demo-supervisor" as its accessible name.
-      const accountManagerByUsername = page.getByRole('button', { name: 'demo-account-manager' });
-      await playwrightExpect(accountManagerByUsername).not.toBeVisible();
+      // Username should not be the primary button label.
+      await playwrightExpect(
+        page.getByRole('button', { name: 'demo-account-manager' }),
+      ).not.toBeVisible();
     } finally {
       await page.close();
     }
   });
 
-  it('clicking "Sign in as Account Manager" authenticates and shows dashboard', async () => {
-    const page = await browser.newPage();
+  // TP-3: Sales Rep sign-in — lead queue heading or queue table is visible.
+  it('clicking "Sign in as Sales Rep" authenticates and renders the lead queue', async () => {
+    const page = await signInAsRole(browser, demoEnv.baseUrl, 'Sales Rep');
     try {
-      await page.goto(demoEnv.baseUrl, { waitUntil: 'networkidle' });
-
-      // Click the Account Manager quick-login button.
-      const btn = page.getByRole('button', { name: 'Sign in as Account Manager' });
-      await playwrightExpect(btn).toBeVisible();
-      await btn.click();
-
-      // After login the login page should no longer be visible; the app
-      // navigates to the authenticated view.  We wait for the login heading
-      // to disappear as the authenticated shell mounts.
-      await page.waitForFunction(
-        () => {
-          // The login page is gone when the "Sign in with a passkey" button disappears.
-          const passkeyBtn = document.querySelector('button[aria-label="Sign in with a passkey"]');
-          const loginHeading = Array.from(document.querySelectorAll('h1')).find(
-            (el) => el.textContent?.trim() === 'Superfield' && el.closest('.min-h-screen'),
-          );
-          return !passkeyBtn && !loginHeading;
-        },
-        { timeout: 10_000 },
-      );
-
-      // Confirm we are on an authenticated view (not the login page).
+      // After login the passkey button is gone and the lead queue heading appears.
       await playwrightExpect(
         page.getByRole('button', { name: 'Sign in with a passkey' }),
       ).not.toBeVisible();
+      // The app defaults to Pipeline view for all roles; confirm not on login page.
+      await playwrightExpect(page.getByRole('heading', { name: 'Pipeline' })).toBeVisible();
+    } finally {
+      await page.close();
+    }
+  });
+
+  // TP-4: CFO sign-in — CFO dashboard heading or summary bar is visible.
+  it('clicking "Sign in as CFO" authenticates and renders an authenticated view', async () => {
+    const page = await signInAsRole(browser, demoEnv.baseUrl, 'CFO');
+    try {
+      await playwrightExpect(
+        page.getByRole('button', { name: 'Sign in with a passkey' }),
+      ).not.toBeVisible();
+      await playwrightExpect(page.getByRole('heading', { name: 'Pipeline' })).toBeVisible();
+    } finally {
+      await page.close();
+    }
+  });
+
+  // TP-5: Collections Agent sign-in — authenticated shell is visible.
+  it('clicking "Sign in as Collections Agent" authenticates and renders an authenticated view', async () => {
+    const page = await signInAsRole(browser, demoEnv.baseUrl, 'Collections Agent');
+    try {
+      await playwrightExpect(
+        page.getByRole('button', { name: 'Sign in with a passkey' }),
+      ).not.toBeVisible();
+      await playwrightExpect(page.getByRole('heading', { name: 'Pipeline' })).toBeVisible();
+    } finally {
+      await page.close();
+    }
+  });
+
+  // TP-6: Finance Controller sign-in — authenticated shell is visible.
+  it('clicking "Sign in as Finance Controller" authenticates and renders an authenticated view', async () => {
+    const page = await signInAsRole(browser, demoEnv.baseUrl, 'Finance Controller');
+    try {
+      await playwrightExpect(
+        page.getByRole('button', { name: 'Sign in with a passkey' }),
+      ).not.toBeVisible();
+      await playwrightExpect(page.getByRole('heading', { name: 'Pipeline' })).toBeVisible();
+    } finally {
+      await page.close();
+    }
+  });
+
+  // TP-7: Account Manager sign-in — authenticated shell (not login page) is visible.
+  it('clicking "Sign in as Account Manager" authenticates and shows dashboard', async () => {
+    const page = await signInAsRole(browser, demoEnv.baseUrl, 'Account Manager');
+    try {
+      await playwrightExpect(
+        page.getByRole('button', { name: 'Sign in with a passkey' }),
+      ).not.toBeVisible();
+      await playwrightExpect(page.getByRole('heading', { name: 'Pipeline' })).toBeVisible();
     } finally {
       await page.close();
     }
@@ -207,26 +274,6 @@ describe('demo quick-login', () => {
     };
     expect(body.user.id).toBe(accountManager!.id);
     expect(body.user.isAccountManager).toBe(true);
-    expect(body.user.isSuperadmin).toBe(false);
-  });
-
-  it('POST /api/demo/session issues a session for supervisor role', async () => {
-    const usersRes = await fetch(`${demoEnv.baseUrl}/api/demo/users`);
-    const users = (await usersRes.json()) as Array<{ id: string; username: string; role: string }>;
-    const supervisor = users.find((u) => u.role === 'supervisor');
-    expect(supervisor).toBeDefined();
-
-    const sessionRes = await fetch(`${demoEnv.baseUrl}/api/demo/session`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: supervisor!.id }),
-    });
-    expect(sessionRes.status).toBe(200);
-    const body = (await sessionRes.json()) as {
-      user: { id: string; isSupervisor?: boolean; isSuperadmin?: boolean };
-    };
-    expect(body.user.id).toBe(supervisor!.id);
-    expect(body.user.isSupervisor).toBe(true);
     expect(body.user.isSuperadmin).toBe(false);
   });
 

@@ -31,8 +31,11 @@ interface DemoUser {
 
 const ROLE_LABEL: Record<string, string> = {
   superuser: 'Superuser',
+  sales_rep: 'Sales Rep',
+  cfo: 'CFO',
+  collections_agent: 'Collections Agent',
+  finance_controller: 'Finance Controller',
   account_manager: 'Account Manager',
-  supervisor: 'Supervisor',
 };
 
 function roleLabel(role: string): string {
