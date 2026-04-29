@@ -15,6 +15,7 @@
 
 import React from 'react';
 import { CfoSummaryBar } from '../components/CfoSummaryBar';
+import { TierTrendChart } from '../components/TierTrendChart';
 
 export function CfoDashboardPage() {
   return (
@@ -25,6 +26,14 @@ export function CfoDashboardPage() {
       {/* Main content with chart section anchors */}
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-12">
         <h1 className="text-2xl font-bold text-gray-900">CFO Dashboard</h1>
+
+        {/* Section: Lead score tier trend (issue #15) */}
+        <section id="section-tier-trend" aria-labelledby="section-tier-trend-heading">
+          <h2 id="section-tier-trend-heading" className="text-lg font-semibold text-gray-800 mb-4">
+            Lead Score Tier Trend
+          </h2>
+          <TierTrendChart />
+        </section>
 
         {/* Section: Pipeline by tier */}
         <section id="section-pipeline" aria-labelledby="section-pipeline-heading">
