@@ -63,7 +63,7 @@ export function PipelineCard({ card, onNavigate }: PipelineCardProps) {
   return (
     <button
       type="button"
-      className="w-full text-left bg-white border border-zinc-200 rounded-lg p-3 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+      className="w-full text-left bg-white border border-zinc-200 rounded-lg p-3 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 min-h-[44px]"
       onClick={() => onNavigate(card.prospect_id)}
       data-testid="pipeline-card"
     >
