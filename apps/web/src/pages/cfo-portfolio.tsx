@@ -20,6 +20,8 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { BarChart3, TrendingUp, Sliders, RotateCcw, Bell } from 'lucide-react';
 import { ExportButton, type MacroScenarioState } from '../components/ExportButton';
 import { ScheduledReportModal, type ScheduledReport } from '../components/ScheduledReportModal';
+import { SkeletonChart } from '../components/Skeleton';
+import { ContextualEmptyState } from '../components/ContextualEmptyState';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -719,8 +721,9 @@ export function CfoPortfolioPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-900" />
+      <div className="p-6 space-y-6 max-w-6xl mx-auto">
+        <SkeletonChart />
+        <SkeletonChart />
       </div>
     );
   }
@@ -876,9 +879,10 @@ export function CfoPortfolioPage() {
         {/* Chart with tooltip */}
         <div className="relative p-4">
           {displayedSegments.length === 0 ? (
-            <div className="flex items-center justify-center h-48 text-sm text-zinc-400">
-              No portfolio data available.
-            </div>
+            <ContextualEmptyState
+              message="No portfolio data yet — prospects must be scored and assigned to a rep before they appear here"
+              testId="portfolio-chart-empty-state"
+            />
           ) : chartView === 'bubble' ? (
             <BubbleChart
               segments={displayedSegments}

@@ -17,6 +17,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { SkeletonChart } from './Skeleton';
+import { ContextualEmptyState } from './ContextualEmptyState';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,7 +70,12 @@ interface AgentBarChartProps {
 
 function AgentBarChart({ rates }: AgentBarChartProps) {
   if (rates.length === 0) {
-    return <p className="text-sm text-gray-400 text-center py-4">No agent data available.</p>;
+    return (
+      <ContextualEmptyState
+        message="No agent recovery data yet — collection cases must be closed before recovery rates can be computed"
+        testId="agent-recovery-empty-state"
+      />
+    );
   }
 
   const maxRate = Math.max(...rates.map((r) => r.recovery_rate), 0.01);
@@ -138,11 +145,7 @@ export function CollectionsPerformancePanel() {
   if (!isCfoUser) return null;
 
   if (loading) {
-    return (
-      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-gray-400">
-        Loading collections performance data…
-      </div>
-    );
+    return <SkeletonChart />;
   }
 
   if (error) {
@@ -181,7 +184,10 @@ export function CollectionsPerformancePanel() {
           Avg Days to Resolution by Escalation Level
         </h3>
         {avg_days_to_resolution_by_escalation_level.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-4">No resolution data available.</p>
+          <ContextualEmptyState
+            message="No resolution data yet — days-to-resolution is computed once collection cases are closed"
+            testId="resolution-empty-state"
+          />
         ) : (
           <div className="divide-y divide-gray-100" role="list">
             {avg_days_to_resolution_by_escalation_level.map((entry) => (

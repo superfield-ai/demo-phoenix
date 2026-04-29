@@ -30,6 +30,8 @@ type FixturePasskeyCredential = {
   last_used_at: string | null;
 };
 
+type LeadsQueueBody = { leads: unknown[]; pending_kyc_count: number };
+
 type FixtureState = {
   tasks?: FixtureTask[];
   /** OAuth status response */
@@ -39,6 +41,12 @@ type FixtureState = {
   /** OAuth complete response */
   oauthComplete?: OAuthCompleteResponse | FixtureResponse<OAuthCompleteResponse>;
   passkeys?: FixturePasskeyCredential[];
+  /**
+   * Lead queue response fixture (issue #19).
+   * Set to a LeadsQueueBody for an immediate response, or a FixtureResponse
+   * to control status code or introduce a delay for skeleton testing.
+   */
+  leadsQueue?: LeadsQueueBody | FixtureResponse<LeadsQueueBody>;
 };
 
 type FixtureStore = Record<string, FixtureState>;
@@ -120,6 +128,21 @@ export async function handleFixtureRequest(req: Request, statePath: string): Pro
     store[fixtureId] = { ...state, passkeys: next };
     writeState(statePath, store);
     return new Response(null, { status: 204 });
+  }
+
+  // Lead queue endpoint (issue #19 — skeleton loaders and contextual empty states)
+  if (req.method === 'GET' && url.pathname === '/api/leads/queue') {
+    return fixtureJson<LeadsQueueBody>(state.leadsQueue ?? { leads: [], pending_kyc_count: 0 });
+  }
+
+  // Disqualified leads endpoint — returns empty list by default for component tests.
+  if (req.method === 'GET' && url.pathname === '/api/leads/disqualified') {
+    return json({ leads: [] });
+  }
+
+  // Auth session endpoint — returns a minimal user object so AuthContext loads cleanly.
+  if (req.method === 'GET' && url.pathname === '/api/auth/me') {
+    return json({ id: 'fixture-user', role: 'sales_rep', email: 'fixture@example.com' });
   }
 
   // OAuth status endpoint

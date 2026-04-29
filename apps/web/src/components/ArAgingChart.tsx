@@ -19,6 +19,8 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { SkeletonChart } from './Skeleton';
+import { ContextualEmptyState } from './ContextualEmptyState';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -302,11 +304,7 @@ export function ArAgingChart() {
   }
 
   if (loading) {
-    return (
-      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-gray-400 text-sm">
-        Loading AR aging data…
-      </div>
-    );
+    return <SkeletonChart />;
   }
 
   if (error) {
@@ -360,7 +358,10 @@ export function ArAgingChart() {
         <h3 className="text-sm font-semibold text-gray-700 mb-4">12-Month AR Aging Trend</h3>
 
         {trend.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">No historical data available.</p>
+          <ContextualEmptyState
+            message="No AR aging history yet — this chart populates once invoices have been tracked for at least one month"
+            testId="ar-aging-trend-empty-state"
+          />
         ) : (
           <div className="overflow-x-auto">
             <svg
