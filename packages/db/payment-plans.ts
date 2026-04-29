@@ -18,7 +18,7 @@
 import type postgres from 'postgres';
 import { sql as defaultSql } from './index';
 
-type TxSql = postgres.TransactionSql;
+type Sql = postgres.Sql;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -406,8 +406,10 @@ export async function createPaymentPlan(
     throw new Error('first_due_date cannot be in the past');
   }
 
-  return sqlClient.begin(async (tx: TxSql) => {
-    const [caseRow] = await tx<{ id: string }[]>`
+  return sqlClient.begin(async (tx) => {
+    const sql = tx as unknown as Sql;
+
+    const [caseRow] = await sql<{ id: string }[]>`
       SELECT id
       FROM rl_collection_cases
       WHERE id = ${collection_case_id}
@@ -417,7 +419,7 @@ export async function createPaymentPlan(
       throw new Error('Collection case not found');
     }
 
-    const currentPlans = await tx<{ id: string }[]>`
+    const currentPlans = await sql<{ id: string }[]>`
       SELECT id
       FROM rl_payment_plans
       WHERE collection_case_id = ${collection_case_id}
@@ -429,7 +431,7 @@ export async function createPaymentPlan(
     }
 
     const installmentAmount = roundCurrency(total_amount / installment_count);
-    const [planRow] = await tx<
+    const [planRow] = await sql<
       {
         id: string;
         collection_case_id: string;
@@ -464,7 +466,7 @@ export async function createPaymentPlan(
         updated_at::text
     `;
 
-    const detail = await getPaymentPlanDetail(planRow.id, tx);
+    const detail = await getPaymentPlanDetail(planRow.id, sql);
     if (!detail) {
       throw new Error('Payment plan not found after insert');
     }
@@ -477,8 +479,10 @@ export async function updatePaymentPlanStatus(
   status: Exclude<PaymentPlanStatus, 'cancelled'>,
   sqlClient: postgres.Sql = defaultSql,
 ): Promise<PaymentPlanDetail | null> {
-  return sqlClient.begin(async (tx: TxSql) => {
-    const detail = await getPaymentPlanDetail(planId, tx);
+  return sqlClient.begin(async (tx) => {
+    const sql = tx as unknown as Sql;
+
+    const detail = await getPaymentPlanDetail(planId, sql);
     if (!detail) return null;
 
     if (status === 'completed') {
@@ -486,14 +490,14 @@ export async function updatePaymentPlanStatus(
         throw new Error('Payment plan cannot be marked completed before it is fully paid');
       }
 
-      await tx`
+      await sql`
         UPDATE rl_payment_plans
         SET status = 'completed',
             updated_at = NOW()
         WHERE id = ${planId}
       `;
 
-      await tx`
+      await sql`
         UPDATE rl_collection_cases
         SET status = 'resolved',
             resolution_type = 'payment_plan',
@@ -502,14 +506,14 @@ export async function updatePaymentPlanStatus(
         WHERE id = ${detail.collection_case_id}
       `;
 
-      await tx`
+      await sql`
         UPDATE rl_invoices
         SET status = 'paid',
             updated_at = NOW()
         WHERE id = ${detail.collection_case.invoice_id}
       `;
     } else if (status === 'breached') {
-      await tx`
+      await sql`
         UPDATE rl_payment_plans
         SET status = 'breached',
             updated_at = NOW()
@@ -517,7 +521,7 @@ export async function updatePaymentPlanStatus(
       `;
     }
 
-    const updated = await getPaymentPlanDetail(planId, tx);
+    const updated = await getPaymentPlanDetail(planId, sql);
     return updated;
   });
 }
