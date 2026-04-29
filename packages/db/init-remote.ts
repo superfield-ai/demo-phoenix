@@ -804,6 +804,7 @@ GRANT USAGE ON SCHEMA public TO finance_controller;
 GRANT SELECT ON rl_invoices TO finance_controller;
 GRANT SELECT ON rl_payments TO finance_controller;
 GRANT SELECT ON rl_collection_cases TO finance_controller;
+GRANT SELECT ON rl_write_off_approvals TO finance_controller;
 GRANT SELECT ON rl_payment_plans TO finance_controller;
 GRANT SELECT ON rl_dunning_actions TO finance_controller;
 GRANT SELECT ON rl_customers TO finance_controller;

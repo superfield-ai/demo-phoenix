@@ -1551,6 +1551,35 @@ CREATE INDEX IF NOT EXISTS idx_rl_collection_cases_agent_id
 CREATE INDEX IF NOT EXISTS idx_rl_collection_cases_status
   ON rl_collection_cases (status);
 
+-- Write-off approval requests: Finance Controller review queue for settlement
+-- proposals that exceed the configurable approval threshold.
+CREATE TABLE IF NOT EXISTS rl_write_off_approvals (
+  id                      TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  collection_case_id      TEXT NOT NULL REFERENCES rl_collection_cases (id) ON DELETE CASCADE,
+  invoice_id              TEXT NOT NULL REFERENCES rl_invoices (id) ON DELETE CASCADE,
+  customer_id             TEXT NOT NULL REFERENCES rl_customers (id) ON DELETE CASCADE,
+  proposed_by             TEXT NOT NULL,
+  reviewed_by             TEXT,
+  settlement_amount       NUMERIC(18, 2) NOT NULL,
+  implied_write_off_amount NUMERIC(18, 2) NOT NULL,
+  status                  TEXT NOT NULL DEFAULT 'pending_approval'
+                             CHECK (status IN ('pending_approval', 'approved', 'rejected')),
+  notes                   TEXT,
+  review_notes            TEXT,
+  reviewed_at             TIMESTAMP WITH TIME ZONE,
+  created_at              TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at              TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_write_off_approvals_status
+  ON rl_write_off_approvals (status);
+CREATE INDEX IF NOT EXISTS idx_rl_write_off_approvals_case_id
+  ON rl_write_off_approvals (collection_case_id);
+CREATE INDEX IF NOT EXISTS idx_rl_write_off_approvals_invoice_id
+  ON rl_write_off_approvals (invoice_id);
+CREATE INDEX IF NOT EXISTS idx_rl_write_off_approvals_customer_id
+  ON rl_write_off_approvals (customer_id);
+
 -- Payment plans: installment arrangements configured by a Collections Agent.
 CREATE TABLE IF NOT EXISTS rl_payment_plans (
   id                  TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,

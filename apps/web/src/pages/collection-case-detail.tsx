@@ -76,6 +76,23 @@ export interface CaseDetail {
     created_at: string;
   }[];
   payment_plans: PaymentPlanSummary[];
+  latest_write_off_approval: {
+    id: string;
+    collection_case_id: string;
+    invoice_id: string;
+    customer_id: string;
+    customer_name: string;
+    proposed_by: string;
+    reviewed_by: string | null;
+    settlement_amount: number;
+    implied_write_off_amount: number;
+    status: 'pending_approval' | 'approved' | 'rejected';
+    notes: string | null;
+    review_notes: string | null;
+    reviewed_at: string | null;
+    created_at: string;
+    updated_at: string;
+  } | null;
 }
 
 export interface PaymentPlanSummary {
@@ -125,7 +142,6 @@ export interface PaymentPlanDetail extends PaymentPlanSummary {
   installments: PaymentPlanInstallment[];
   payment_total: number;
   paid_installment_count: number;
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -176,6 +192,13 @@ const DUNNING_ACTION_LABELS: Record<string, string> = {
 
 function dunningActionLabel(actionType: string): string {
   return DUNNING_ACTION_LABELS[actionType] ?? actionType;
+}
+
+function approvalStatusLabel(status: string): string {
+  if (status === 'pending_approval') return 'Pending approval';
+  if (status === 'approved') return 'Approved';
+  if (status === 'rejected') return 'Rejected';
+  return status;
 }
 
 const CONTACT_TYPE_ICONS: Record<ContactType, React.ReactNode> = {
@@ -647,6 +670,141 @@ function ContactLogForm({ caseId, onSuccess }: ContactLogFormProps) {
   );
 }
 
+interface SettlementProposalFormProps {
+  caseId: string;
+  invoiceAmount: number;
+  onSuccess: () => void | Promise<void>;
+}
+
+function SettlementProposalForm({ caseId, invoiceAmount, onSuccess }: SettlementProposalFormProps) {
+  const [settlementAmount, setSettlementAmount] = useState('');
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const parsedAmount = parseFloat(settlementAmount);
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      setError('Settlement amount must be a positive number.');
+      return;
+    }
+    if (parsedAmount > invoiceAmount) {
+      setError('Settlement amount cannot exceed the invoice amount.');
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/collection-cases/${caseId}/settlement`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settlement_amount: parsedAmount,
+          notes: notes.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      setSettlementAmount('');
+      setNotes('');
+      setShowForm(false);
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit settlement proposal');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!showForm) {
+    return (
+      <button
+        type="button"
+        onClick={() => setShowForm(true)}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors min-h-[44px]"
+        data-testid="propose-settlement-btn"
+      >
+        Propose Settlement
+      </button>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="border border-emerald-200 rounded-xl p-4 bg-emerald-50 space-y-4"
+      data-testid="settlement-proposal-form"
+    >
+      <h3 className="text-sm font-semibold text-emerald-900">Propose Settlement</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label
+            className="block text-xs font-medium text-emerald-700 mb-1"
+            htmlFor="settlement-amount"
+          >
+            Settlement Amount
+          </label>
+          <input
+            id="settlement-amount"
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={settlementAmount}
+            onChange={(e) => setSettlementAmount(e.target.value)}
+            placeholder={invoiceAmount.toFixed(2)}
+            className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+        </div>
+        <div>
+          <label
+            className="block text-xs font-medium text-emerald-700 mb-1"
+            htmlFor="settlement-notes"
+          >
+            Notes
+          </label>
+          <input
+            id="settlement-notes"
+            type="text"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Optional context"
+            className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+        </div>
+      </div>
+
+      {error && <p className="text-xs text-red-600">{error}</p>}
+
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors min-h-[44px]"
+          data-testid="settlement-submit-btn"
+        >
+          {submitting ? 'Submitting…' : 'Submit Proposal'}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setShowForm(false);
+            setError(null);
+          }}
+          className="px-4 py-2 rounded-lg bg-zinc-100 text-zinc-600 text-sm font-medium hover:bg-zinc-200 transition-colors min-h-[44px]"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main page component
 // ---------------------------------------------------------------------------
@@ -759,6 +917,42 @@ export function CollectionCaseDetailPage({ caseId, onBack }: CollectionCaseDetai
             <span>Opened {formatDate(detail.opened_at)}</span>
           </div>
         </div>
+
+        {detail.latest_write_off_approval && (
+          <div
+            className={`rounded-xl border p-4 ${
+              detail.latest_write_off_approval.status === 'rejected'
+                ? 'border-red-200 bg-red-50'
+                : detail.latest_write_off_approval.status === 'approved'
+                  ? 'border-emerald-200 bg-emerald-50'
+                  : 'border-amber-200 bg-amber-50'
+            }`}
+            data-testid="write-off-approval-banner"
+          >
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-zinc-900">
+                  {approvalStatusLabel(detail.latest_write_off_approval.status)}
+                </p>
+                <p className="text-xs text-zinc-600">
+                  Settlement {detail.latest_write_off_approval.settlement_amount.toFixed(2)} on
+                  implied write-off{' '}
+                  {detail.latest_write_off_approval.implied_write_off_amount.toFixed(2)}
+                </p>
+              </div>
+              <div className="text-xs text-zinc-500">
+                Proposed by {detail.latest_write_off_approval.proposed_by}
+                {detail.latest_write_off_approval.reviewed_by &&
+                  ` · Reviewed by ${detail.latest_write_off_approval.reviewed_by}`}
+              </div>
+            </div>
+            {detail.latest_write_off_approval.review_notes && (
+              <p className="mt-2 text-xs text-zinc-600 whitespace-pre-wrap">
+                {detail.latest_write_off_approval.review_notes}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Invoice info */}
         <section>
@@ -896,6 +1090,19 @@ export function CollectionCaseDetailPage({ caseId, onBack }: CollectionCaseDetai
           </div>
           <ContactLogForm caseId={caseId} onSuccess={handleNewContactLog} />
         </section>
+
+        {detail.status === 'open' && (
+          <section>
+            <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">
+              Settlement Proposal
+            </h2>
+            <SettlementProposalForm
+              caseId={caseId}
+              invoiceAmount={detail.invoice.amount}
+              onSuccess={fetchDetail}
+            />
+          </section>
+        )}
 
         {/* Dunning timeline */}
         <section data-testid="dunning-timeline">

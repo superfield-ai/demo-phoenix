@@ -64,6 +64,7 @@ import { handleBdmCampaignRequest } from './api/bdm-campaign';
 import { handleCampaignSummaryRequest } from './api/campaign-summary';
 import { handleComplianceRequest } from './api/compliance';
 import { handleLegalHoldRequest } from './api/legal-hold';
+import { handleWriteOffApprovalsRequest } from './api/write-off-approvals';
 import { handleInvoicesRequest } from './api/invoices';
 import { handleDunningRequest } from './api/dunning';
 import { handlePaymentPlansRequest } from './api/payment-plans';
@@ -550,6 +551,12 @@ export default {
     if (url.pathname.startsWith('/api/legal-holds')) {
       const legalHoldRes = await handleLegalHoldRequest(req, url, appState);
       if (legalHoldRes) return withTrace(legalHoldRes);
+    }
+
+    // Finance Controller write-off approval queue (issue #51).
+    if (url.pathname.startsWith('/api/write-off-approvals')) {
+      const writeOffApprovalsRes = await handleWriteOffApprovalsRequest(req, url, appState);
+      if (writeOffApprovalsRes) return withTrace(writeOffApprovalsRes);
     }
 
     // Collections Agent case queue and contact logging (issue #49).

@@ -37,6 +37,7 @@ import {
   type ContactType,
 } from 'db/collection-cases';
 import { createPaymentPlan } from 'db/payment-plans';
+import { proposeSettlement } from 'db/write-off-approvals';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -127,6 +128,7 @@ export async function handleCollectionCasesRequest(
 
   // Routes that require a case ID.
   const contactsMatch = url.pathname.match(/^\/api\/collection-cases\/([^/]+)\/contacts$/);
+  const settlementMatch = url.pathname.match(/^\/api\/collection-cases\/([^/]+)\/settlement$/);
   const caseMatch = url.pathname.match(/^\/api\/collection-cases\/([^/]+)$/);
 
   // ── POST /api/collection-cases/:id/contacts ───────────────────────────
@@ -253,6 +255,55 @@ export async function handleCollectionCasesRequest(
       }
       console.error('[collection-cases] createPaymentPlan failed:', err);
       return json({ error: 'Internal Server Error' }, 500);
+    }
+  }
+
+  // ── POST /api/collection-cases/:id/settlement ─────────────────────────
+  if (settlementMatch && req.method === 'POST') {
+    const caseId = settlementMatch[1];
+
+    const detail = await getCollectionCaseDetail(caseId, sql).catch(() => null);
+    if (!detail) {
+      return json({ error: 'Collection case not found' }, 404);
+    }
+    if (!superuser && detail.agent_id !== user.id) {
+      return json({ error: 'Forbidden' }, 403);
+    }
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: 'Invalid JSON body' }, 400);
+    }
+
+    if (typeof body !== 'object' || body === null) {
+      return json({ error: 'Request body must be a JSON object' }, 400);
+    }
+
+    const b = body as Record<string, unknown>;
+    if (typeof b.settlement_amount !== 'number' || !Number.isFinite(b.settlement_amount)) {
+      return json({ error: 'settlement_amount is required and must be a number' }, 400);
+    }
+    if (b.notes !== undefined && b.notes !== null && typeof b.notes !== 'string') {
+      return json({ error: 'notes must be a string or null' }, 400);
+    }
+
+    try {
+      const outcome = await proposeSettlement(sql, {
+        collection_case_id: caseId,
+        settlement_amount: b.settlement_amount as number,
+        notes: (b.notes as string | null | undefined) ?? null,
+        proposed_by: user.id,
+        actor_id: user.id,
+      });
+      return json(outcome, outcome.auto_approved ? 200 : 201);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('not found')) {
+        return json({ error: msg }, 404);
+      }
+      return json({ error: msg }, 422);
     }
   }
 

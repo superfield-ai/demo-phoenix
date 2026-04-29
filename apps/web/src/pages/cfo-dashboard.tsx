@@ -18,13 +18,18 @@
  */
 
 import React from 'react';
+import { useAuth } from '../context/AuthContext';
 import { CfoSummaryBar } from '../components/CfoSummaryBar';
 import { TierTrendChart } from '../components/TierTrendChart';
 import { ArAgingChart } from '../components/ArAgingChart';
 import { CollectionsPerformancePanel } from '../components/CollectionsPerformancePanel';
 import { InvoicePanel } from '../components/InvoicePanel';
+import { WriteOffApprovalsPanel } from '../components/WriteOffApprovalsPanel';
 
 export function CfoDashboardPage() {
+  const { user } = useAuth();
+  const canViewWriteOffApprovals = user?.role === 'finance_controller' || user?.isSuperadmin;
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sticky executive summary bar */}
@@ -91,6 +96,22 @@ export function CfoDashboardPage() {
           </h2>
           <InvoicePanel />
         </section>
+
+        {/* Section: Write-off approvals */}
+        {canViewWriteOffApprovals && (
+          <section
+            id="section-write-off-approvals"
+            aria-labelledby="section-write-off-approvals-heading"
+          >
+            <h2
+              id="section-write-off-approvals-heading"
+              className="text-lg font-semibold text-gray-800 mb-4"
+            >
+              Write-Off Approvals
+            </h2>
+            <WriteOffApprovalsPanel />
+          </section>
+        )}
 
         {/* Section: Score model */}
         <section id="section-score-model" aria-labelledby="section-score-model-heading">
