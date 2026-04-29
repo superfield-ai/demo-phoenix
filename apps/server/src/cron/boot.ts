@@ -18,6 +18,7 @@ import { registerRetentionSchedulerJob } from './jobs/retention-scheduler';
 import { registerSoc2EvidenceCaptureJob } from './jobs/soc2-evidence-capture';
 import { registerCfoReportDeliveryJob } from './jobs/cfo-report-delivery';
 import { registerDunningEngineJob } from './jobs/dunning-engine';
+import { registerPaymentPlanMonitorJob } from './jobs/payment-plan-monitor';
 
 let scheduler: CronScheduler | null = null;
 
@@ -45,6 +46,7 @@ export function startCronScheduler(): CronScheduler {
   registerSoc2EvidenceCaptureJob(scheduler);
   registerCfoReportDeliveryJob(scheduler);
   registerDunningEngineJob(scheduler);
+  registerPaymentPlanMonitorJob(scheduler);
 
   scheduler.start();
   return scheduler;

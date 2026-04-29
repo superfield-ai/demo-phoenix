@@ -17,6 +17,7 @@
 
 import type postgres from 'postgres';
 import { sql as defaultSql } from './index';
+import { listPaymentPlansForCase, type PaymentPlanSummary } from './payment-plans';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,6 +106,8 @@ export interface CollectionCaseDetail {
     response: string | null;
     created_at: string;
   }[];
+  /** Payment plans configured on this collection case. */
+  payment_plans: PaymentPlanSummary[];
 }
 
 // ---------------------------------------------------------------------------
@@ -328,6 +331,8 @@ export async function getCollectionCaseDetail(
     ORDER BY created_at ASC
   `;
 
+  const paymentPlans = await listPaymentPlansForCase(caseId, sqlClient);
+
   return {
     id: cr.id,
     invoice_id: cr.invoice_id,
@@ -378,6 +383,7 @@ export async function getCollectionCaseDetail(
       response: r.response ?? null,
       created_at: r.created_at,
     })),
+    payment_plans: paymentPlans,
   };
 }
 

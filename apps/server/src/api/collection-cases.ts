@@ -36,6 +36,7 @@ import {
   type CollectionCaseStatus,
   type ContactType,
 } from 'db/collection-cases';
+import { createPaymentPlan } from 'db/payment-plans';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -129,6 +130,7 @@ export async function handleCollectionCasesRequest(
   const caseMatch = url.pathname.match(/^\/api\/collection-cases\/([^/]+)$/);
 
   // ── POST /api/collection-cases/:id/contacts ───────────────────────────
+  const paymentPlansMatch = url.pathname.match(/^\/api\/collection-cases\/([^/]+)\/payment-plans$/);
   if (contactsMatch && req.method === 'POST') {
     const caseId = contactsMatch[1];
 
@@ -186,6 +188,70 @@ export async function handleCollectionCasesRequest(
       return json(contact, 201);
     } catch (err) {
       console.error('[collection-cases] createContactLog failed:', err);
+      return json({ error: 'Internal Server Error' }, 500);
+    }
+  }
+
+  // ── POST /api/collection-cases/:id/payment-plans ───────────────────────
+  if (paymentPlansMatch && req.method === 'POST') {
+    const caseId = paymentPlansMatch[1];
+
+    const detail = await getCollectionCaseDetail(caseId, sql).catch(() => null);
+    if (!detail) {
+      return json({ error: 'Collection case not found' }, 404);
+    }
+    if (!superuser && detail.agent_id !== user.id) {
+      return json({ error: 'Forbidden' }, 403);
+    }
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: 'Invalid JSON body' }, 400);
+    }
+
+    if (typeof body !== 'object' || body === null) {
+      return json({ error: 'Request body must be a JSON object' }, 400);
+    }
+
+    const b = body as Record<string, unknown>;
+    if (typeof b.total_amount !== 'number' || b.total_amount <= 0) {
+      return json({ error: 'total_amount is required and must be a positive number' }, 400);
+    }
+    if (
+      typeof b.installment_count !== 'number' ||
+      !Number.isInteger(b.installment_count) ||
+      b.installment_count < 1
+    ) {
+      return json({ error: 'installment_count is required and must be an integer >= 1' }, 400);
+    }
+    if (typeof b.first_due_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(b.first_due_date)) {
+      return json({ error: 'first_due_date is required and must be a YYYY-MM-DD string' }, 400);
+    }
+
+    try {
+      const plan = await createPaymentPlan(
+        {
+          collection_case_id: caseId,
+          total_amount: b.total_amount as number,
+          installment_count: b.installment_count as number,
+          first_due_date: b.first_due_date as string,
+        },
+        sql,
+      );
+      return json(plan, 201);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (
+        message.includes('active payment plan') ||
+        message.includes('first_due_date cannot be in the past') ||
+        message.includes('must be a positive number') ||
+        message.includes('must be an integer')
+      ) {
+        return json({ error: message }, 409);
+      }
+      console.error('[collection-cases] createPaymentPlan failed:', err);
       return json({ error: 'Internal Server Error' }, 500);
     }
   }

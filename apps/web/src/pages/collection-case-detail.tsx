@@ -75,6 +75,56 @@ export interface CaseDetail {
     response: string | null;
     created_at: string;
   }[];
+  payment_plans: PaymentPlanSummary[];
+}
+
+export interface PaymentPlanSummary {
+  id: string;
+  collection_case_id: string;
+  total_amount: number;
+  installment_count: number;
+  installment_amount: number;
+  next_due_date: string | null;
+  status: 'current' | 'breached' | 'completed' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentPlanInstallment {
+  installment_number: number;
+  due_date: string;
+  amount: number;
+  status: 'paid' | 'unpaid';
+  paid_amount: number;
+}
+
+export interface PaymentPlanDetail extends PaymentPlanSummary {
+  collection_case: {
+    id: string;
+    invoice_id: string;
+    agent_id: string | null;
+    status: string;
+    resolution_type: string | null;
+  };
+  invoice: {
+    id: string;
+    customer_id: string;
+    amount: number;
+    currency: string;
+    due_date: string | null;
+    status: string;
+    issued_at: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+  customer: {
+    id: string;
+    company_name: string;
+    segment: string | null;
+  };
+  installments: PaymentPlanInstallment[];
+  payment_total: number;
+  paid_installment_count: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +183,314 @@ const CONTACT_TYPE_ICONS: Record<ContactType, React.ReactNode> = {
   email: <Mail size={14} />,
   portal: <Globe size={14} />,
 };
+
+const PAYMENT_PLAN_STATUS_STYLES: Record<
+  PaymentPlanSummary['status'],
+  { bg: string; text: string; label: string }
+> = {
+  current: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Current' },
+  breached: { bg: 'bg-red-100', text: 'text-red-800', label: 'Breached' },
+  completed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed' },
+  cancelled: { bg: 'bg-zinc-100', text: 'text-zinc-600', label: 'Cancelled' },
+};
+
+function PaymentPlanStatusBadge({ status }: { status: PaymentPlanSummary['status'] }) {
+  const styles = PAYMENT_PLAN_STATUS_STYLES[status];
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${styles.bg} ${styles.text}`}
+    >
+      {styles.label}
+    </span>
+  );
+}
+
+interface PaymentPlanFormProps {
+  caseId: string;
+  onCreated: (plan: PaymentPlanDetail) => void;
+}
+
+function PaymentPlanForm({ caseId, onCreated }: PaymentPlanFormProps) {
+  const [totalAmount, setTotalAmount] = useState('');
+  const [installmentCount, setInstallmentCount] = useState('3');
+  const [firstDueDate, setFirstDueDate] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    const amount = Number(totalAmount);
+    const count = Number(installmentCount);
+
+    try {
+      const res = await fetch(`/api/collection-cases/${caseId}/payment-plans`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          total_amount: amount,
+          installment_count: count,
+          first_due_date: firstDueDate,
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      const plan = (await res.json()) as PaymentPlanDetail;
+      onCreated(plan);
+      setTotalAmount('');
+      setInstallmentCount('3');
+      setFirstDueDate('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create payment plan');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form
+      className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 space-y-4"
+      onSubmit={handleSubmit}
+      data-testid="payment-plan-form"
+    >
+      <div>
+        <h3 className="text-sm font-semibold text-zinc-900">Propose Payment Plan</h3>
+        <p className="text-xs text-zinc-500 mt-0.5">
+          Configure the total amount, installment count, and first due date.
+        </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <label className="block">
+          <span className="block text-xs font-medium text-zinc-600 mb-1">Total amount</span>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={totalAmount}
+            onChange={(e) => setTotalAmount(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="2500.00"
+            data-testid="payment-plan-total-amount"
+          />
+        </label>
+        <label className="block">
+          <span className="block text-xs font-medium text-zinc-600 mb-1">Installments</span>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={installmentCount}
+            onChange={(e) => setInstallmentCount(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            data-testid="payment-plan-installment-count"
+          />
+        </label>
+        <label className="block">
+          <span className="block text-xs font-medium text-zinc-600 mb-1">First due date</span>
+          <input
+            type="date"
+            value={firstDueDate}
+            onChange={(e) => setFirstDueDate(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            data-testid="payment-plan-first-due-date"
+          />
+        </label>
+      </div>
+      {error && <p className="text-xs text-red-500">{error}</p>}
+      <button
+        type="submit"
+        disabled={submitting}
+        className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors min-h-[44px]"
+        data-testid="payment-plan-submit-btn"
+      >
+        {submitting ? 'Saving…' : 'Create payment plan'}
+      </button>
+    </form>
+  );
+}
+
+interface PaymentPlanPanelProps {
+  caseId: string;
+  paymentPlans: PaymentPlanSummary[];
+  onPlanCreated: (plan: PaymentPlanDetail) => void;
+}
+
+function PaymentPlanPanel({ caseId, paymentPlans, onPlanCreated }: PaymentPlanPanelProps) {
+  const currentPlan = paymentPlans.find((plan) => plan.status === 'current') ?? null;
+  const displayedPlan = currentPlan ?? paymentPlans[0] ?? null;
+  const canCreateNewPlan = currentPlan === null;
+  const [planDetail, setPlanDetail] = useState<PaymentPlanDetail | null>(null);
+  const [loading, setLoading] = useState(Boolean(displayedPlan));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!displayedPlan) {
+      setPlanDetail(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    fetch(`/api/payment-plans/${displayedPlan.id}`, { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+        return res.json() as Promise<PaymentPlanDetail>;
+      })
+      .then((plan) => {
+        if (!cancelled) {
+          setPlanDetail(plan);
+        }
+      })
+      .catch((err: Error) => {
+        if (!cancelled) {
+          setError(err.message ?? 'Failed to load payment plan');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [displayedPlan?.id]);
+
+  if (!displayedPlan) {
+    return (
+      <div
+        className="space-y-4 rounded-xl border border-zinc-200 bg-white p-4"
+        data-testid="payment-plan-panel"
+      >
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-2">
+            Payment Plan
+          </h2>
+          <p className="text-sm text-zinc-500">
+            No active payment plan is configured for this case yet.
+          </p>
+        </div>
+        <PaymentPlanForm caseId={caseId} onCreated={onPlanCreated} />
+      </div>
+    );
+  }
+
+  return (
+    <section
+      className="space-y-4 rounded-xl border border-zinc-200 bg-white p-4"
+      data-testid="payment-plan-panel"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-1">
+            Payment Plan
+          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <PaymentPlanStatusBadge status={displayedPlan.status} />
+            <span className="text-sm text-zinc-500">
+              Next due {planDetail?.next_due_date ? formatDate(planDetail.next_due_date) : '—'}
+            </span>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-xs uppercase tracking-wide text-zinc-400">Payment total</p>
+          <p className="text-sm font-semibold text-zinc-900">
+            {formatAmount(planDetail?.payment_total ?? 0, detailCurrencyPlaceholder)}
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-zinc-500">Loading installment schedule…</p>
+      ) : error ? (
+        <p className="text-sm text-red-500">{error}</p>
+      ) : planDetail ? (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div className="rounded-lg bg-zinc-50 border border-zinc-100 p-3">
+              <p className="text-xs uppercase tracking-wide text-zinc-400">Total amount</p>
+              <p className="font-semibold text-zinc-900">
+                {formatAmount(planDetail.total_amount, planDetail.invoice.currency)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-zinc-50 border border-zinc-100 p-3">
+              <p className="text-xs uppercase tracking-wide text-zinc-400">Installments</p>
+              <p className="font-semibold text-zinc-900">{planDetail.installment_count}</p>
+            </div>
+            <div className="rounded-lg bg-zinc-50 border border-zinc-100 p-3">
+              <p className="text-xs uppercase tracking-wide text-zinc-400">Per installment</p>
+              <p className="font-semibold text-zinc-900">
+                {formatAmount(planDetail.installment_amount, planDetail.invoice.currency)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-zinc-50 border border-zinc-100 p-3">
+              <p className="text-xs uppercase tracking-wide text-zinc-400">Paid / total</p>
+              <p className="font-semibold text-zinc-900">
+                {formatAmount(planDetail.payment_total, planDetail.invoice.currency)} /{' '}
+                {formatAmount(planDetail.total_amount, planDetail.invoice.currency)}
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="overflow-hidden rounded-lg border border-zinc-200"
+            data-testid="payment-plan-schedule"
+          >
+            <table className="min-w-full divide-y divide-zinc-200 text-sm">
+              <thead className="bg-zinc-50 text-zinc-500 uppercase tracking-wide text-xs">
+                <tr>
+                  <th className="px-3 py-2 text-left">#</th>
+                  <th className="px-3 py-2 text-left">Due date</th>
+                  <th className="px-3 py-2 text-left">Amount</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {planDetail.installments.map((installment) => (
+                  <tr key={installment.installment_number}>
+                    <td className="px-3 py-2 text-zinc-600">{installment.installment_number}</td>
+                    <td className="px-3 py-2 text-zinc-700">{formatDate(installment.due_date)}</td>
+                    <td className="px-3 py-2 text-zinc-700">
+                      {formatAmount(installment.amount, planDetail.invoice.currency)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          installment.status === 'paid'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {installment.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
+
+      {canCreateNewPlan && <PaymentPlanForm caseId={caseId} onCreated={onPlanCreated} />}
+    </section>
+  );
+}
+
+const detailCurrencyPlaceholder = 'USD';
 
 // ---------------------------------------------------------------------------
 // Contact log form
@@ -329,6 +687,10 @@ export function CollectionCaseDetailPage({ caseId, onBack }: CollectionCaseDetai
     });
   }
 
+  function handleNewPaymentPlan(_plan: PaymentPlanDetail) {
+    void fetchDetail();
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col h-full bg-white">
@@ -486,6 +848,13 @@ export function CollectionCaseDetailPage({ caseId, onBack }: CollectionCaseDetai
             </div>
           )}
         </section>
+
+        {/* Payment plan */}
+        <PaymentPlanPanel
+          caseId={caseId}
+          paymentPlans={detail.payment_plans}
+          onPlanCreated={handleNewPaymentPlan}
+        />
 
         {/* Contact log */}
         <section>
