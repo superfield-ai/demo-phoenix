@@ -588,6 +588,13 @@ export default {
       if (collectionCasesRes) return withTrace(collectionCasesRes);
     }
 
+    // Customer health score (issue #54).
+    // GET /api/customers/:id/health — current score and contributing signals
+    if (url.pathname.match(/^\/api\/customers\/[^/]+\/health$/)) {
+      const customersRes = await handleCustomersRequest(req, url, appState);
+      if (customersRes) return withTrace(customersRes);
+    }
+
     // Payment-plan detail and status (issue #50).
     // GET   /api/payment-plans/:id         — payment plan detail with schedule
     // PATCH /api/payment-plans/:id/status  — update to breached or completed

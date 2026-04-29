@@ -1872,3 +1872,30 @@ CREATE INDEX IF NOT EXISTS idx_rl_cfo_scheduled_reports_user_id
 
 INSERT INTO _schema_version (migration) VALUES ('cfo-scheduled-reports-001')
   ON CONFLICT (migration) DO NOTHING;
+
+-- Customer health scores: one record per customer per calendar day.
+-- Composite 0–100 score derived from payment behaviour signals.
+-- Idempotency: unique index on (customer_id, score_date) prevents duplicates.
+-- Issue: https://github.com/superfield-ai/demo-phoenix/issues/54
+CREATE TABLE IF NOT EXISTS rl_customer_health_scores (
+  id                      TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  customer_id             TEXT NOT NULL REFERENCES rl_customers (id) ON DELETE CASCADE,
+  score_date              DATE NOT NULL,
+  score                   NUMERIC(5, 2) NOT NULL CHECK (score >= 0 AND score <= 100),
+  days_overdue_signal     NUMERIC(5, 2) NOT NULL DEFAULT 0,
+  breach_count_signal     NUMERIC(5, 2) NOT NULL DEFAULT 0,
+  escalation_signal       NUMERIC(5, 2) NOT NULL DEFAULT 0,
+  days_overdue_value      INTEGER NOT NULL DEFAULT 0,
+  breach_count_value      INTEGER NOT NULL DEFAULT 0,
+  escalation_level_value  INTEGER NOT NULL DEFAULT 0,
+  computed_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS rl_customer_health_scores_one_per_day
+  ON rl_customer_health_scores (customer_id, score_date);
+
+CREATE INDEX IF NOT EXISTS idx_rl_customer_health_scores_customer_id
+  ON rl_customer_health_scores (customer_id, score_date DESC);
+
+INSERT INTO _schema_version (migration) VALUES ('customer-health-scores-001')
+  ON CONFLICT (migration) DO NOTHING;

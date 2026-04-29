@@ -1,7 +1,7 @@
 /**
  * @file api/customers
  *
- * Customer lifecycle API (issue #53).
+ * Customer lifecycle API (issue #53) and customer health score API (issue #54).
  *
  * ## Endpoints
  *
@@ -21,16 +21,33 @@
  *     Body: { account_manager_id: string | null }
  *     Auth: session cookie required.
  *
+ *   GET /api/customers/:id/health
+ *     Returns the current health score and contributing signals for a customer.
+ *     Response shape:
+ *       {
+ *         customer_id: string,
+ *         score_date:  string,   // ISO date of the latest computed score
+ *         score:       number,   // composite 0–100
+ *         signals: [
+ *           { label: string, value: number, contribution: number },
+ *           ...
+ *         ]
+ *       }
+ *     Returns 404 if no score has been computed yet for the customer.
+ *     Auth: account_manager, collections_agent, finance_controller, cfo, or superuser.
+ *
  * Customer records are created atomically when a Deal is transitioned to
  * closed_won (see api/leads.ts PATCH /api/leads/:id/stage).
  *
  * Canonical docs: docs/prd.md
- * Issue: https://github.com/superfield-ai/demo-phoenix/issues/53
+ * Issues: https://github.com/superfield-ai/demo-phoenix/issues/53
+ *         https://github.com/superfield-ai/demo-phoenix/issues/54
  */
 
 import type { AppState } from '../index';
 import { getCorsHeaders, getAuthenticatedUser } from './auth';
-import { makeJson } from '../lib/response';
+import { isSuperuser, makeJson } from '../lib/response';
+import { getLatestCustomerHealthScore } from 'db/customer-health-scores';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,6 +70,27 @@ export interface CustomerDetail extends CustomerRow {
 }
 
 // ---------------------------------------------------------------------------
+// Role constants (health score)
+// ---------------------------------------------------------------------------
+
+/** Roles that may read customer health data. */
+const READ_ROLES = new Set(['account_manager', 'collections_agent', 'finance_controller', 'cfo']);
+
+// ---------------------------------------------------------------------------
+// Role resolver (health score)
+// ---------------------------------------------------------------------------
+
+async function resolveActorRole(sql: AppState['sql'], userId: string): Promise<string | null> {
+  const rows = await sql<{ properties: { role?: string } }[]>`
+    SELECT properties
+    FROM entities
+    WHERE id = ${userId} AND type = 'user'
+    LIMIT 1
+  `;
+  return rows[0]?.properties?.role ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
 
@@ -72,6 +110,64 @@ export async function handleCustomersRequest(
   const corsHeaders = getCorsHeaders(req);
   const { sql } = appState;
   const json = makeJson(corsHeaders);
+
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  // ── GET /api/customers/:id/health ─────────────────────────────────────────
+  const healthMatch = url.pathname.match(/^\/api\/customers\/([^/]+)\/health$/);
+  if (healthMatch) {
+    const customerId = healthMatch[1];
+
+    const user = await getAuthenticatedUser(req);
+    if (!user) return json({ error: 'Unauthorized' }, 401);
+
+    const superuser = isSuperuser(user.id);
+    let callerRole: string | null;
+    if (superuser) {
+      callerRole = 'account_manager';
+    } else {
+      callerRole = await resolveActorRole(sql, user.id);
+    }
+
+    if (!callerRole || !READ_ROLES.has(callerRole)) {
+      return json({ error: 'Forbidden' }, 403);
+    }
+
+    if (req.method !== 'GET') {
+      return json({ error: 'Method Not Allowed' }, 405);
+    }
+
+    const scoreRow = await getLatestCustomerHealthScore(customerId, sql);
+
+    if (!scoreRow) {
+      return json({ error: 'No health score found for this customer' }, 404);
+    }
+
+    return json({
+      customer_id: scoreRow.customer_id,
+      score_date: scoreRow.score_date,
+      score: scoreRow.score,
+      signals: [
+        {
+          label: 'Days overdue on most recent invoice',
+          value: scoreRow.days_overdue_value,
+          contribution: scoreRow.days_overdue_signal,
+        },
+        {
+          label: 'Payment plan breaches (last 6 months)',
+          value: scoreRow.breach_count_value,
+          contribution: scoreRow.breach_count_signal,
+        },
+        {
+          label: 'Collection case escalation level',
+          value: scoreRow.escalation_level_value,
+          contribution: scoreRow.escalation_signal,
+        },
+      ],
+    });
+  }
 
   // ── GET /api/customers ────────────────────────────────────────────────────
   if (req.method === 'GET' && url.pathname === '/api/customers') {
