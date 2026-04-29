@@ -55,7 +55,7 @@ export async function handleCfoCollectionsRequest(
     const user = await getAuthenticatedUser(req);
     if (!user) return json({ error: 'Unauthorized' }, 401);
 
-    let callerRole: string | null = null;
+    let callerRole: string | null;
     if (!isSuperuser(user.id)) {
       callerRole = await resolveActorRole(sql, user.id);
       if (!callerRole || !COLLECTIONS_ALLOWED_ROLES.has(callerRole)) {
