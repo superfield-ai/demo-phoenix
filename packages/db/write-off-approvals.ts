@@ -238,7 +238,8 @@ export async function proposeSettlement(
   const threshold = getWriteOffApprovalThreshold();
 
   return sqlClient.begin(async (tx) => {
-    const row = await loadCaseAndInvoice(tx, input.collection_case_id);
+    const txSql = tx as unknown as SqlClient;
+    const row = await loadCaseAndInvoice(txSql, input.collection_case_id);
     if (!row) {
       throw new Error(`Collection case not found: ${input.collection_case_id}`);
     }
@@ -256,7 +257,7 @@ export async function proposeSettlement(
     const requiresApproval = impliedWriteOffAmount > threshold;
 
     if (requiresApproval) {
-      const [approval] = await tx<
+      const [approval] = await txSql<
         {
           id: string;
           collection_case_id: string;
@@ -345,7 +346,7 @@ export async function proposeSettlement(
       };
     }
 
-    const settlement = await applySettlement(tx, {
+    const settlement = await applySettlement(txSql, {
       collection_case_id: input.collection_case_id,
       invoice_id: row.invoice_id,
       invoice_amount: invoiceAmount,
@@ -378,6 +379,7 @@ export async function listWriteOffApprovals(
           invoice_id: string;
           customer_id: string;
           customer_name: string;
+          invoice_amount: string;
           proposed_by: string;
           reviewed_by: string | null;
           settlement_amount: string;
@@ -581,7 +583,8 @@ export async function decideWriteOffApproval(
   settlement: SettlementApplication | null;
 }> {
   return sqlClient.begin(async (tx) => {
-    const approvalRows = await tx<
+    const txSql = tx as unknown as SqlClient;
+    const approvalRows = await txSql<
       {
         id: string;
         collection_case_id: string;
@@ -636,7 +639,7 @@ export async function decideWriteOffApproval(
 
     let settlement: SettlementApplication | null = null;
     if (input.decision === 'approved') {
-      const caseRow = await loadCaseAndInvoice(tx, current.collection_case_id);
+      const caseRow = await loadCaseAndInvoice(txSql, current.collection_case_id);
       if (!caseRow) {
         throw new Error(`Collection case not found: ${current.collection_case_id}`);
       }
@@ -644,7 +647,7 @@ export async function decideWriteOffApproval(
         throw new Error(`Collection case ${current.collection_case_id} is not open`);
       }
 
-      settlement = await applySettlement(tx, {
+      settlement = await applySettlement(txSql, {
         collection_case_id: current.collection_case_id,
         invoice_id: current.invoice_id,
         invoice_amount: Number(caseRow.invoice_amount),
@@ -669,7 +672,7 @@ export async function decideWriteOffApproval(
         );
     }
 
-    const [updated] = await tx<
+    const [updated] = await txSql<
       {
         id: string;
         collection_case_id: string;
