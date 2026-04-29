@@ -19,6 +19,7 @@ import React from 'react';
 import { CfoSummaryBar } from '../components/CfoSummaryBar';
 import { TierTrendChart } from '../components/TierTrendChart';
 import { ArAgingChart } from '../components/ArAgingChart';
+import { CollectionsPerformancePanel } from '../components/CollectionsPerformancePanel';
 
 export function CfoDashboardPage() {
   return (
@@ -66,7 +67,7 @@ export function CfoDashboardPage() {
           <ArAgingChart />
         </section>
 
-        {/* Section: Collection recovery */}
+        {/* Section: Collection recovery + performance panel */}
         <section
           id="section-collection-recovery"
           aria-labelledby="section-collection-recovery-heading"
@@ -75,11 +76,9 @@ export function CfoDashboardPage() {
             id="section-collection-recovery-heading"
             className="text-lg font-semibold text-gray-800 mb-4"
           >
-            Collection Recovery (90d)
+            Collections Performance
           </h2>
-          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-gray-400">
-            Collection recovery chart — coming in P2-5
-          </div>
+          <CollectionsPerformancePanel />
         </section>
 
         {/* Section: Score model */}

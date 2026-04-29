@@ -44,7 +44,8 @@
     "./cltv-rescore-worker": "./cltv-rescore-worker.ts",
     "./leads-queue": "./leads-queue.ts",
     "./cfo-summary": "./cfo-summary.ts",
-    "./cfo-tier-trend": "./cfo-tier-trend.ts"
+    "./cfo-tier-trend": "./cfo-tier-trend.ts",
+    "./collections-performance": "./collections-performance.ts"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
