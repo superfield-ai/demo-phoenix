@@ -52,7 +52,8 @@
     "./payment-plans": "./payment-plans.ts",
     "./write-off-approvals": "./write-off-approvals.ts",
     "./customer-health-scores": "./customer-health-scores.ts",
-    "./account-manager-customers": "./account-manager-customers.ts"
+    "./account-manager-customers": "./account-manager-customers.ts",
+    "./interventions": "./interventions.ts"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"

@@ -79,6 +79,7 @@ import { handleCfoCollectionsRequest } from './api/cfo-collections';
 import { handleCollectionCasesRequest } from './api/collection-cases';
 import { handleCustomersRequest } from './api/customers';
 import { handleAccountManagerRequest } from './api/account-manager';
+import { handleInterventionsRequest } from './api/interventions';
 
 // Starter behavior:
 // the server boot path auto-runs a local schema initializer for convenience.
@@ -602,6 +603,15 @@ export default {
     if (url.pathname.match(/^\/api\/customers\/[^/]+\/health$/)) {
       const customersRes = await handleCustomersRequest(req, url, appState);
       if (customersRes) return withTrace(customersRes);
+    }
+
+    // Account Manager intervention workflow (issue #56).
+    // POST  /api/interventions               — create an intervention
+    // PATCH /api/interventions/:id           — update status/outcome
+    // GET   /api/interventions?customer_id=  — list for a customer
+    if (url.pathname.startsWith('/api/interventions')) {
+      const interventionsRes = await handleInterventionsRequest(req, url, appState);
+      if (interventionsRes) return withTrace(interventionsRes);
     }
 
     // Payment-plan detail and status (issue #50).
