@@ -77,6 +77,7 @@ import { handleLabelClearanceRequest } from './api/label-clearance';
 import { handleCfoRequest } from './api/cfo';
 import { handleCfoCollectionsRequest } from './api/cfo-collections';
 import { handleCollectionCasesRequest } from './api/collection-cases';
+import { handleCustomersRequest } from './api/customers';
 
 // Starter behavior:
 // the server boot path auto-runs a local schema initializer for convenience.
@@ -533,6 +534,15 @@ export default {
     if (url.pathname.startsWith('/api/kyc')) {
       const kycRes = await handleKycRequest(req, url, appState);
       if (kycRes) return withTrace(kycRes);
+    }
+
+    // Customer lifecycle endpoints (issue #53).
+    // GET   /api/customers             — list customers with optional segment + health_score filters
+    // GET   /api/customers/:id         — customer detail with invoice summary
+    // PATCH /api/customers/:id         — update account_manager_id
+    if (url.pathname.startsWith('/api/customers')) {
+      const customersRes = await handleCustomersRequest(req, url, appState);
+      if (customersRes) return withTrace(customersRes);
     }
 
     // Phase 1 in-app notifications (issue #11).
