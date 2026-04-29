@@ -31,6 +31,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { SkeletonRows } from '../components/Skeleton';
 import { ContextualEmptyState } from '../components/ContextualEmptyState';
+import { ScoreTooltip } from '../components/ScoreTooltip';
 
 // ---------------------------------------------------------------------------
 // Types (mirrors server/api/leads.ts and db/leads-queue.ts)
@@ -56,6 +57,11 @@ export interface QueueLead {
   created_at: string;
   /** True when the prospect has no CLTVScore yet — scoring engine still running. */
   scoring_in_progress: boolean;
+  /** Snapshot inputs from the CLTVScore record — used to populate the score explanation tooltip. */
+  macro_inputs_snapshot?: Record<string, number | string | null> | null;
+  industry_inputs_snapshot?: Record<string, number | string | null> | null;
+  company_inputs_snapshot?: Record<string, number | string | null> | null;
+  rationale_tier?: string | null;
 }
 
 export interface DisqualifiedLead {
@@ -82,6 +88,12 @@ const TIER_COLORS: Record<ScoreTier, { bg: string; text: string; label: string }
   C: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'C' },
 };
 
+const TIER_SUMMARY: Record<ScoreTier, string> = {
+  A: 'Tier A leads have the highest composite CLTV score (≥ 80) and represent your strongest near-term revenue opportunities.',
+  B: 'Tier B leads have a good composite CLTV score (60–79) and are solid opportunities worth active pursuit.',
+  C: 'Tier C leads have a fair composite CLTV score (40–59) and may require more qualification before significant investment.',
+};
+
 const KYC_COLORS: Record<string, { bg: string; text: string }> = {
   verified: { bg: 'bg-green-50', text: 'text-green-700' },
   pending: { bg: 'bg-zinc-100', text: 'text-zinc-600' },
@@ -104,18 +116,46 @@ function formatCltv(low: number | null, high: number | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// Score tier badge
+// Score tier badge (with ScoreTooltip)
 // ---------------------------------------------------------------------------
 
-function TierBadge({ tier }: { tier: ScoreTier | null }) {
+interface TierBadgeProps {
+  tier: ScoreTier | null;
+  lead?: QueueLead;
+}
+
+function TierBadge({ tier, lead }: TierBadgeProps) {
   if (!tier) return <span className="text-zinc-400 text-xs">—</span>;
   const { bg, text, label } = TIER_COLORS[tier];
+
+  // Build detail_content from the lead's stored snapshot fields if available.
+  const detailContent =
+    lead &&
+    (lead.macro_inputs_snapshot || lead.industry_inputs_snapshot || lead.company_inputs_snapshot)
+      ? {
+          formula: 'composite = macro × 0.30 + industry × 0.30 + company × 0.40',
+          inputs: {
+            ...(lead.macro_inputs_snapshot ?? {}),
+            ...(lead.industry_inputs_snapshot ?? {}),
+            ...(lead.company_inputs_snapshot ?? {}),
+          } as Record<string, number | string | null>,
+        }
+      : undefined;
+
   return (
-    <span
-      className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-sm ${bg} ${text} ring-2 ring-offset-1 ${tier === 'A' ? 'ring-green-400' : tier === 'B' ? 'ring-yellow-400' : 'ring-orange-400'}`}
-      title={`Score tier ${label}`}
-    >
-      {label}
+    <span className="inline-flex items-center gap-1" data-testid="tier-badge-wrapper">
+      <span
+        className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-sm ${bg} ${text} ring-2 ring-offset-1 ${tier === 'A' ? 'ring-green-400' : tier === 'B' ? 'ring-yellow-400' : 'ring-orange-400'}`}
+        title={`Score tier ${label}`}
+        data-testid="tier-badge"
+      >
+        {label}
+      </span>
+      <ScoreTooltip
+        summary_text={TIER_SUMMARY[tier]}
+        detail_content={detailContent}
+        aria_label={`Score tier ${label} explanation`}
+      />
     </span>
   );
 }
@@ -144,8 +184,8 @@ function LeadRow({ lead }: { lead: QueueLead }) {
   return (
     <div className="flex items-center gap-4 px-4 py-3 border-b border-zinc-100 hover:bg-zinc-50 transition-colors">
       {/* Tier badge — most prominent element */}
-      <div className="flex-shrink-0 w-10 flex justify-center">
-        <TierBadge tier={lead.score_tier} />
+      <div className="flex-shrink-0 w-14 flex justify-center">
+        <TierBadge tier={lead.score_tier} lead={lead} />
       </div>
 
       {/* Company / industry / SIC */}
@@ -531,7 +571,7 @@ export function LeadQueuePage() {
       {/* Column headers (queue tab only) */}
       {activeTab === 'queue' && leads.length > 0 && (
         <div className="flex items-center gap-4 px-4 py-2 bg-zinc-50 border-b border-zinc-200 text-xs font-medium text-zinc-500 uppercase tracking-wide">
-          <div className="w-10 text-center shrink-0">Tier</div>
+          <div className="w-14 text-center shrink-0">Tier</div>
           <div className="flex-1">Company</div>
           <div className="w-32 text-right shrink-0">CLTV</div>
           <div className="w-24 text-center shrink-0">KYC</div>
