@@ -18,6 +18,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { PipelineCard, type PipelineCardData } from '../components/PipelineCard';
+import { SkeletonCard } from '../components/Skeleton';
+import { ContextualEmptyState } from '../components/ContextualEmptyState';
 
 export type PipelineStage = 'contacted' | 'qualified' | 'proposal' | 'closed_won' | 'closed_lost';
 
@@ -124,8 +126,21 @@ export function PipelineBoard({ onNavigate }: PipelineBoardProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      <div className="flex-1 overflow-x-auto">
+        <div className="flex gap-4 p-6 min-w-max">
+          {STAGE_ORDER.map((stage) => (
+            <div key={stage} className="flex flex-col w-64 shrink-0">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-zinc-700">{STAGE_LABELS[stage]}</h3>
+              </div>
+              <div className="flex flex-col gap-2 flex-1 min-h-16 bg-zinc-50 rounded-lg p-2">
+                {[0, 1, 2].map((i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -164,9 +179,10 @@ export function PipelineBoard({ onNavigate }: PipelineBoardProps) {
               {/* Cards */}
               <div className="flex flex-col gap-2 flex-1 min-h-16 bg-zinc-50 rounded-lg p-2">
                 {cards.length === 0 ? (
-                  <div className="flex items-center justify-center h-16 text-xs text-zinc-400">
-                    No leads
-                  </div>
+                  <ContextualEmptyState
+                    message="No leads in this stage yet"
+                    testId={`pipeline-empty-${stage}`}
+                  />
                 ) : (
                   cards.map((card) => (
                     <PipelineCard key={card.deal_id} card={card} onNavigate={handleNavigate} />

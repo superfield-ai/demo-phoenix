@@ -18,6 +18,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { SkeletonChart } from './Skeleton';
+import { ContextualEmptyState } from './ContextualEmptyState';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,11 +64,8 @@ function SvgLineChart({ buckets }: ChartProps) {
   const innerH = H - PAD.top - PAD.bottom;
 
   if (buckets.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
-        No data for this quarter
-      </div>
-    );
+    // Empty state is handled by the parent TierTrendChart component.
+    return null;
   }
 
   const n = buckets.length;
@@ -297,15 +296,20 @@ export function TierTrendChart() {
       </div>
 
       {/* Chart body */}
-      {loading && (
-        <div className="flex items-center justify-center h-40 text-gray-400 text-sm">Loading…</div>
-      )}
+      {loading && <SkeletonChart />}
 
       {!loading && error && (
         <div className="flex items-center justify-center h-40 text-red-500 text-sm">{error}</div>
       )}
 
-      {!loading && !error && buckets !== null && (
+      {!loading && !error && buckets !== null && buckets.length === 0 && (
+        <ContextualEmptyState
+          message="No tier trend data yet — lead scoring must run for at least one week to populate this chart"
+          testId="tier-trend-empty-state"
+        />
+      )}
+
+      {!loading && !error && buckets !== null && buckets.length > 0 && (
         <>
           <SvgLineChart buckets={buckets} />
           <Legend />

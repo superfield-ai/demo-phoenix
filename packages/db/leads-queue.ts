@@ -88,6 +88,12 @@ export interface QueueLeadRow {
    * last_activity_at > NUDGE_DAYS_THRESHOLD.  Computed by the API layer.
    */
   nudge: boolean;
+  /**
+   * True when the prospect has no CLTVScore row yet (composite_score === null),
+   * meaning the scoring engine is still running.  The UI shows a "Scoring…"
+   * badge in the queue row instead of hiding the prospect entirely.
+   */
+  scoring_in_progress: boolean;
 }
 
 /** A single row in the disqualified lead list. */
@@ -290,6 +296,7 @@ export async function getQueueLeads(
       last_activity_at: r.last_activity_at,
       created_at: r.created_at,
       nudge,
+      scoring_in_progress: score === null,
     };
   });
 }

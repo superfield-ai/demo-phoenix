@@ -29,6 +29,8 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { SkeletonRows } from '../components/Skeleton';
+import { ContextualEmptyState } from '../components/ContextualEmptyState';
 
 // ---------------------------------------------------------------------------
 // Types (mirrors server/api/leads.ts and db/leads-queue.ts)
@@ -52,6 +54,8 @@ export interface QueueLead {
   deal_stage: string | null;
   nudge: boolean;
   created_at: string;
+  /** True when the prospect has no CLTVScore yet — scoring engine still running. */
+  scoring_in_progress: boolean;
 }
 
 export interface DisqualifiedLead {
@@ -171,6 +175,15 @@ function LeadRow({ lead }: { lead: QueueLead }) {
         <p className="text-sm font-medium text-zinc-700">{lead.days_in_queue}</p>
       </div>
 
+      {/* Scoring badge — shown when the prospect has no CLTVScore yet */}
+      {lead.scoring_in_progress && (
+        <div className="shrink-0" data-testid="scoring-badge">
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 uppercase tracking-wide whitespace-nowrap animate-pulse">
+            Scoring…
+          </span>
+        </div>
+      )}
+
       {/* Follow-up nudge — shown when deal is in Contacted stage with no recent activity */}
       {lead.nudge && (
         <div className="shrink-0">
@@ -271,33 +284,6 @@ function DisqualifiedRow({ lead }: { lead: DisqualifiedLead }) {
           {lead.disqualified_at ? new Date(lead.disqualified_at).toLocaleDateString() : '—'}
         </p>
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Empty state
-// ---------------------------------------------------------------------------
-
-function EmptyState({ pendingKycCount }: { pendingKycCount: number }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full py-24 text-center">
-      <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center mb-4">
-        <span className="text-3xl">🎯</span>
-      </div>
-      <h2 className="text-xl font-semibold text-zinc-800 mb-2">Your queue is empty</h2>
-      <p className="text-zinc-500 max-w-sm">
-        The scoring engine is working.{' '}
-        {pendingKycCount > 0 ? (
-          <>
-            There {pendingKycCount === 1 ? 'is' : 'are'} <strong>{pendingKycCount}</strong>{' '}
-            {pendingKycCount === 1 ? 'prospect' : 'prospects'} pending KYC — leads will appear here
-            once scoring completes.
-          </>
-        ) : (
-          'No prospects are currently pending KYC.'
-        )}
-      </p>
     </div>
   );
 }
@@ -556,16 +542,20 @@ export function LeadQueuePage() {
       <div className="flex-1 overflow-hidden">
         {activeTab === 'queue' && (
           <>
-            {loadingQueue && (
-              <div className="flex justify-center items-center h-32">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500" />
-              </div>
-            )}
+            {loadingQueue && <SkeletonRows count={8} />}
             {!loadingQueue && queueError && (
               <div className="px-6 py-8 text-center text-red-500">{queueError}</div>
             )}
             {!loadingQueue && !queueError && leads.length === 0 && (
-              <EmptyState pendingKycCount={pendingKycCount} />
+              <ContextualEmptyState
+                message={
+                  pendingKycCount > 0
+                    ? `No qualified leads yet — KYC checks are running for ${pendingKycCount} prospect${pendingKycCount === 1 ? '' : 's'}`
+                    : 'No qualified leads yet — no prospects are currently pending KYC'
+                }
+                detail="Leads will appear here once scoring completes."
+                testId="lead-queue-empty-state"
+              />
             )}
             {!loadingQueue && !queueError && leads.length > 0 && <VirtualLeadList leads={leads} />}
           </>
@@ -573,18 +563,15 @@ export function LeadQueuePage() {
 
         {activeTab === 'disqualified' && (
           <>
-            {loadingDisqualified && (
-              <div className="flex justify-center items-center h-32">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500" />
-              </div>
-            )}
+            {loadingDisqualified && <SkeletonRows count={5} />}
             {!loadingDisqualified && disqualifiedError && (
               <div className="px-6 py-8 text-center text-red-500">{disqualifiedError}</div>
             )}
             {!loadingDisqualified && !disqualifiedError && disqualified.length === 0 && (
-              <div className="px-6 py-12 text-center text-zinc-400 text-sm">
-                No disqualified leads.
-              </div>
+              <ContextualEmptyState
+                message="No disqualified leads — all reviewed prospects are still in the active queue"
+                testId="disqualified-empty-state"
+              />
             )}
             {!loadingDisqualified && !disqualifiedError && disqualified.length > 0 && (
               <div className="overflow-y-auto h-full">

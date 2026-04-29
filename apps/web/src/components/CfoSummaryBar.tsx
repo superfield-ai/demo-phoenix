@@ -27,6 +27,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { SkeletonBar } from './Skeleton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -146,14 +147,7 @@ export function CfoSummaryBar() {
   if (!isCfoUser) return null;
 
   if (loading) {
-    return (
-      <div
-        aria-label="CFO executive summary bar loading"
-        className="sticky top-0 z-10 w-full bg-gray-50 border-b border-gray-200 px-6 py-3 flex items-center gap-2"
-      >
-        <span className="text-sm text-gray-400">Loading portfolio summary…</span>
-      </div>
-    );
+    return <SkeletonBar />;
   }
 
   if (error) {
