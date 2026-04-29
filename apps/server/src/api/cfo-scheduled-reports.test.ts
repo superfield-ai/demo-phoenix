@@ -102,8 +102,6 @@ describe('POST creates scheduled report config — TP-1', () => {
     const userId = crypto.randomUUID();
     await insertEntity(userId, 'cfo', sql);
 
-    const reportId = crypto.randomUUID();
-
     // Insert directly to test the DB model (handler test is covered by TP-1 role check).
     const row = await insertScheduledReport(
       {
