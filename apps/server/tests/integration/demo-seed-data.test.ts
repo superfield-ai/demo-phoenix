@@ -1,7 +1,7 @@
 /**
  * @file apps/server/tests/integration/demo-seed-data.test.ts
  *
- * Integration tests for seedDemoData() (issues #46, #58).
+ * Integration tests for seedDemoData() (issues #46, #58, #76).
  *
  * No mocks — real Postgres container + real migrate/seed functions.
  *
@@ -42,9 +42,25 @@
  *
  *   TP-14 (issue #58) KYC manual review prospects present with failed KYC records.
  *
+ *   TP-16 (issue #76) Pipeline board — at least 8 deals with non-null CLTV
+ *         score and tier, spread across at least 4 distinct deal stages.
+ *
+ *   TP-17 (issue #76) Score rationale — seeded leads have non-null rationale
+ *         text in all three rationale columns.
+ *
+ *   TP-18 (issue #76) Finance Controller — at least one write-off approval
+ *         in pending_approval state.
+ *
+ *   TP-19 (issue #76) Finance Controller — at least two invoices with
+ *         status = overdue.
+ *
+ *   TP-20 (issue #76) Finance Controller — at least one payment plan in an
+ *         actionable state (current or breached).
+ *
  * Canonical docs: docs/prd.md
  * Issue: https://github.com/superfield-ai/demo-phoenix/issues/46
  * Issue: https://github.com/superfield-ai/demo-phoenix/issues/58
+ * Issue: https://github.com/superfield-ai/demo-phoenix/issues/76
  */
 
 import { afterAll, beforeAll, describe, test, expect } from 'vitest';
@@ -572,5 +588,144 @@ describe('TP-15: dunning action sequences', () => {
       SELECT DISTINCT action_type FROM rl_dunning_actions
     `;
     expect(rows.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TP-16 (issue #76): Pipeline board — deals with CLTV scores across stages
+// ---------------------------------------------------------------------------
+
+describe('TP-16: pipeline deals with CLTV scores and tier badges', () => {
+  test('at least 8 deals are linked to prospects with a non-null CLTV score and tier', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(DISTINCT d.id)::TEXT AS cnt
+      FROM rl_deals d
+      JOIN rl_cltv_scores cs ON cs.entity_id = d.prospect_id
+        AND cs.entity_type = 'prospect'
+        AND cs.tier IS NOT NULL
+        AND cs.composite_score IS NOT NULL
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(8);
+  });
+
+  test('CLTV-scored deals span at least 4 distinct pipeline stages', async () => {
+    const rows = await sql<{ stage: string }[]>`
+      SELECT DISTINCT d.stage
+      FROM rl_deals d
+      JOIN rl_cltv_scores cs ON cs.entity_id = d.prospect_id
+        AND cs.entity_type = 'prospect'
+        AND cs.tier IS NOT NULL
+    `;
+    expect(rows.length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('all four CLTV tiers (A/B/C/D) are represented among pipeline deals', async () => {
+    const rows = await sql<{ tier: string }[]>`
+      SELECT DISTINCT cs.tier
+      FROM rl_deals d
+      JOIN rl_cltv_scores cs ON cs.entity_id = d.prospect_id
+        AND cs.entity_type = 'prospect'
+        AND cs.tier IS NOT NULL
+    `;
+    const tiers = new Set(rows.map((r: { tier: string }) => r.tier));
+    for (const t of ['A', 'B', 'C', 'D']) {
+      expect(tiers.has(t), `tier '${t}' must appear in pipeline deals`).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TP-17 (issue #76): Score rationale text exists for seeded pipeline deals
+// ---------------------------------------------------------------------------
+
+describe('TP-17: score rationale for pipeline deals', () => {
+  test('CLTV scores linked to deals have non-null rationale in all three columns', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(DISTINCT cs.id)::TEXT AS cnt
+      FROM rl_deals d
+      JOIN rl_cltv_scores cs ON cs.entity_id = d.prospect_id
+        AND cs.entity_type = 'prospect'
+      WHERE cs.rationale_macro IS NOT NULL
+        AND cs.rationale_industry IS NOT NULL
+        AND cs.rationale_company IS NOT NULL
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(8);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TP-18 (issue #76): Finance Controller — pending write-off/settlement approval
+// ---------------------------------------------------------------------------
+
+describe('TP-18: Finance Controller pending write-off approvals', () => {
+  test('at least one write-off approval is in pending_approval state', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_write_off_approvals
+      WHERE status = 'pending_approval'
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(1);
+  });
+
+  test('pending write-off approval has a settlement amount', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_write_off_approvals
+      WHERE status = 'pending_approval'
+        AND settlement_amount IS NOT NULL
+        AND settlement_amount > 0
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TP-19 (issue #76): Finance Controller — overdue invoices in AR dashboard
+// ---------------------------------------------------------------------------
+
+describe('TP-19: Finance Controller AR dashboard overdue invoices', () => {
+  test('at least two invoices have status = overdue', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_invoices
+      WHERE status = 'overdue'
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(2);
+  });
+
+  test('overdue invoices have past due dates', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_invoices
+      WHERE status = 'overdue'
+        AND due_date < CURRENT_DATE
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TP-20 (issue #76): Finance Controller — actionable payment plans
+// ---------------------------------------------------------------------------
+
+describe('TP-20: Finance Controller actionable payment plans', () => {
+  test('at least one payment plan is in current or breached state', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_payment_plans
+      WHERE status IN ('current', 'breached')
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(1);
+  });
+
+  test('actionable payment plans have an installment amount and next due date', async () => {
+    const rows = await sql<{ cnt: string }[]>`
+      SELECT COUNT(*)::TEXT AS cnt
+      FROM rl_payment_plans
+      WHERE status IN ('current', 'breached')
+        AND installment_amount IS NOT NULL
+        AND next_due_date IS NOT NULL
+    `;
+    expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(1);
   });
 });

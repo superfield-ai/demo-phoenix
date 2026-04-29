@@ -9,7 +9,8 @@
  *   - rl_kyc_records for each prospect
  *   - rl_cltv_scores for all tiers (macro/industry/company components + rationale)
  *   - 20+ rl_customers with health_score spread (healthy, at-risk, churned)
- *   - rl_deals in multiple pipeline stages
+ *   - rl_deals in all 5 pipeline stages (contacted/qualified/proposal/closed_won/closed_lost),
+ *     each linked to a prospect with a CLTV score (tier A/B/C/D) and rationale text
  *   - 40+ rl_invoices spanning all invoice_status values with aging buckets
  *   - rl_dunning_actions: D+1/D+7/D+14/D+30 sequences with realistic sent_at timestamps
  *   - rl_collection_cases in all statuses, each with 3+ rl_contact_logs
@@ -28,6 +29,7 @@
  * Canonical docs: docs/prd.md
  * Issue: https://github.com/superfield-ai/demo-phoenix/issues/46
  * Issue: https://github.com/superfield-ai/demo-phoenix/issues/58
+ * Issue: https://github.com/superfield-ai/demo-phoenix/issues/76
  */
 
 import type { sql as SqlPool } from 'db';
