@@ -46,7 +46,8 @@
     "./cfo-summary": "./cfo-summary.ts",
     "./cfo-tier-trend": "./cfo-tier-trend.ts",
     "./collections-performance": "./collections-performance.ts",
-    "./invoices": "./invoices.ts"
+    "./invoices": "./invoices.ts",
+    "./dunning": "./dunning.ts"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
