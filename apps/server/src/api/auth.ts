@@ -165,6 +165,7 @@ export async function handleAuthRequest(
       isCrmAdmin: false,
       isComplianceOfficer: false,
       isCfo: false,
+      isBdm: false,
       role: null,
     }));
 
@@ -189,6 +190,7 @@ export async function handleAuthRequest(
           isCrmAdmin: access.isCrmAdmin,
           isComplianceOfficer: access.isComplianceOfficer,
           isCfo: access.isCfo,
+          isBdm: access.isBdm,
           role: access.role,
           onboarding_completed: onboardingCompleted,
         },

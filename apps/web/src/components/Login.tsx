@@ -36,6 +36,7 @@ const ROLE_LABEL: Record<string, string> = {
   collections_agent: 'Collections Agent',
   finance_controller: 'Finance Controller',
   account_manager: 'Account Manager',
+  bdm: 'BDM',
 };
 
 function roleLabel(role: string): string {

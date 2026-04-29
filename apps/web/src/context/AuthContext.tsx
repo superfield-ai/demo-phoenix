@@ -8,6 +8,7 @@ export interface User {
   isComplianceOfficer?: boolean;
   role?: string | null;
   isCfo?: boolean;
+  isBdm?: boolean;
   onboarding_completed?: boolean;
 }
 
