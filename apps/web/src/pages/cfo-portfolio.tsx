@@ -22,6 +22,7 @@ import { ExportButton, type MacroScenarioState } from '../components/ExportButto
 import { ScheduledReportModal, type ScheduledReport } from '../components/ScheduledReportModal';
 import { SkeletonChart } from '../components/Skeleton';
 import { ContextualEmptyState } from '../components/ContextualEmptyState';
+import { ScoreTooltip } from '../components/ScoreTooltip';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -225,6 +226,46 @@ function formatCltv(value: number): string {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
   return `$${value}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tier legend (with ScoreTooltip explanations)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TIER_DESCRIPTIONS: Record<string, string> = {
+  A: 'Tier A — Composite score ≥ 80. Highest-quality leads with strong macro, industry, and company signals. These represent your most predictable and valuable revenue opportunities.',
+  B: 'Tier B — Composite score 60–79. Good-quality leads with solid fundamentals. Worth active sales effort; some risk factors present but manageable.',
+  C: 'Tier C — Composite score 40–59. Fair-quality leads with mixed signals. Require closer qualification; revenue potential is more variable.',
+  D: 'Tier D — Composite score < 40. Low-quality leads with significant risk factors. Likely require re-scoring or further KYC before investing sales time.',
+};
+
+function TierLegend() {
+  return (
+    <div
+      className="flex flex-wrap gap-3 items-center"
+      data-testid="tier-legend"
+      aria-label="Tier color legend"
+    >
+      {(['A', 'B', 'C', 'D'] as const).map((tier) => (
+        <span
+          key={tier}
+          className="inline-flex items-center gap-1.5"
+          data-testid={`tier-legend-item-${tier}`}
+        >
+          <span
+            className="inline-block w-3 h-3 rounded-sm shrink-0"
+            style={{ backgroundColor: TIER_COLORS[tier] }}
+            aria-hidden="true"
+          />
+          <span className="text-xs text-zinc-600 font-medium">Tier {tier}</span>
+          <ScoreTooltip
+            summary_text={TIER_DESCRIPTIONS[tier]}
+            aria_label={`Tier ${tier} explanation`}
+          />
+        </span>
+      ))}
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -904,6 +945,11 @@ export function CfoPortfolioPage() {
               <SegmentTooltip seg={hoveredSegment} />
             </div>
           )}
+        </div>
+
+        {/* Tier color legend with score explanation tooltips */}
+        <div className="px-5 py-3 border-t border-zinc-100">
+          <TierLegend />
         </div>
       </div>
 

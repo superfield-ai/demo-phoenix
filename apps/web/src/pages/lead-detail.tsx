@@ -21,6 +21,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { Phone, Mail, Calendar, RefreshCw, ChevronDown } from 'lucide-react';
+import { ScoreTooltip, type ScoreDetailContent } from '../components/ScoreTooltip';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types (mirroring server LeadDetailResponse)
@@ -215,6 +216,62 @@ function activityLabel(type: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Score tooltip content helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TIER_SUMMARY_MAP: Record<string, string> = {
+  A: 'Tier A leads have the highest composite CLTV score (≥ 80) and represent your strongest near-term revenue opportunities.',
+  B: 'Tier B leads have a good composite CLTV score (60–79) and are solid opportunities worth active pursuit.',
+  C: 'Tier C leads have a fair composite CLTV score (40–59) and may require more qualification before significant investment.',
+  D: 'Tier D leads have a low composite CLTV score (< 40) and are unlikely to convert without significant effort.',
+};
+
+const TIER_FORMULA = 'composite = macro × 0.30 + industry × 0.30 + company × 0.40';
+
+function buildTierDetailContent(score: CltvScoreDetail): ScoreDetailContent {
+  return {
+    formula: TIER_FORMULA,
+    inputs: {
+      macro_score: score.macro_score,
+      industry_score: score.industry_score,
+      company_score: score.company_score,
+      composite_score: score.composite_score / 100,
+    },
+  };
+}
+
+function buildMacroDetailContent(score: CltvScoreDetail): ScoreDetailContent | undefined {
+  const snap = score.macro_inputs_snapshot;
+  if (!snap) return undefined;
+  return {
+    formula: 'macro = avg(norm(interest_rate), norm(gdp_growth_rate), norm(inflation_rate))',
+    inputs: {
+      interest_rate: snap.interest_rate,
+      gdp_growth_rate: snap.gdp_growth_rate,
+      inflation_rate: snap.inflation_rate,
+    },
+  };
+}
+
+function buildIndustryDetailContent(score: CltvScoreDetail): ScoreDetailContent | undefined {
+  const snap = score.industry_inputs_snapshot;
+  if (!snap || typeof snap !== 'object') return undefined;
+  return {
+    formula: 'industry = avg(norm(growth_rate), 1 - norm(default_rate), norm(payment_speed))',
+    inputs: snap as Record<string, number | string | null>,
+  };
+}
+
+function buildCompanyDetailContent(score: CltvScoreDetail): ScoreDetailContent | undefined {
+  const snap = score.company_inputs_snapshot;
+  if (!snap || typeof snap !== 'object') return undefined;
+  return {
+    formula: 'company = avg(liquidity, revenue_stability, debt_load_penalty)',
+    inputs: snap as Record<string, number | string | null>,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Score rationale panel
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -228,10 +285,20 @@ function ScoreRationalePanel({ score }: { score: CltvScoreDetail }) {
     <section className="border border-zinc-200 rounded-xl p-5 bg-white space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-zinc-900">Score Rationale</h3>
-        <span
-          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${tierBadgeClass(score.tier)}`}
-        >
-          Tier {score.tier} — {tierLabel(score.tier)}
+        <span className="inline-flex items-center gap-1">
+          <span
+            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${tierBadgeClass(score.tier)}`}
+            data-testid="detail-tier-badge"
+          >
+            Tier {score.tier} — {tierLabel(score.tier)}
+          </span>
+          <ScoreTooltip
+            summary_text={
+              TIER_SUMMARY_MAP[score.tier] ?? `Tier ${score.tier} composite CLTV score.`
+            }
+            detail_content={buildTierDetailContent(score)}
+            aria_label={`Tier ${score.tier} score explanation`}
+          />
         </span>
       </div>
 
@@ -253,13 +320,27 @@ function ScoreRationalePanel({ score }: { score: CltvScoreDetail }) {
 
       {/* Sub-score bars */}
       <div className="space-y-3">
-        <SubScoreBar label="Macro health" pct={macroPct} rationale={score.rationale_macro} />
+        <SubScoreBar
+          label="Macro health"
+          pct={macroPct}
+          rationale={score.rationale_macro}
+          summary="The macro health score reflects the current interest rate, GDP growth, and inflation environment — higher is better for CLTV."
+          detail_content={buildMacroDetailContent(score)}
+        />
         <SubScoreBar
           label="Industry signal"
           pct={industryPct}
           rationale={score.rationale_industry}
+          summary="The industry signal score is based on your prospect's sector growth rate, historical default rates, and typical payment speed."
+          detail_content={buildIndustryDetailContent(score)}
         />
-        <SubScoreBar label="Company signal" pct={companyPct} rationale={score.rationale_company} />
+        <SubScoreBar
+          label="Company signal"
+          pct={companyPct}
+          rationale={score.rationale_company}
+          summary="The company signal score reflects the prospect's liquidity, revenue stability, and debt load — drawn from KYC and public filings."
+          detail_content={buildCompanyDetailContent(score)}
+        />
       </div>
 
       {/* Metadata footer */}
@@ -275,15 +356,28 @@ function SubScoreBar({
   label,
   pct,
   rationale,
+  summary,
+  detail_content,
 }: {
   label: string;
   pct: number;
   rationale: string | null;
+  summary?: string;
+  detail_content?: ScoreDetailContent;
 }) {
   return (
-    <div>
+    <div data-testid="sub-score-bar">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium text-zinc-700">{label}</span>
+        <span className="inline-flex items-center gap-0.5 text-xs font-medium text-zinc-700">
+          {label}
+          {summary && (
+            <ScoreTooltip
+              summary_text={summary}
+              detail_content={detail_content}
+              aria_label={`${label} score explanation`}
+            />
+          )}
+        </span>
         <span className="text-xs font-semibold text-zinc-900">{pct}</span>
       </div>
       <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
@@ -375,7 +469,13 @@ function CltvEstimatePanel({
   return (
     <section className="border border-zinc-200 rounded-xl p-5 bg-white space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-900">CLTV Estimate (3-year)</h3>
+        <h3 className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-900">
+          CLTV Estimate (3-year)
+          <ScoreTooltip
+            summary_text="This 3-year customer lifetime value estimate is a forward projection derived from the composite CLTV score — the range reflects model uncertainty at the low, mid, and high confidence bounds."
+            aria_label="CLTV estimate explanation"
+          />
+        </h3>
         <button
           type="button"
           onClick={onToggleStress}
