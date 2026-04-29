@@ -38,7 +38,6 @@ import { startPostgres, type PgContainer } from '../helpers/pg-container';
 import { createTestSession } from '../helpers/test-session';
 
 const PORT = 31583;
-const BASE = `http://localhost:${PORT}`;
 const SERVER_READY_TIMEOUT_MS = 60_000;
 const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
 const SERVER_ENTRY = 'apps/server/src/index.ts';
@@ -51,7 +50,7 @@ let sql: ReturnType<typeof postgres>;
 
 // Sessions
 let repCookie = '';
-let repUserId = '';
+let _repUserId = '';
 let reviewerCookie = '';
 
 // We run three servers on different ports for the three KYC stub outcomes.
@@ -129,7 +128,7 @@ beforeAll(async () => {
     role: 'sales_rep',
   });
   repCookie = repSession.cookie;
-  repUserId = repSession.userId;
+  _repUserId = repSession.userId;
 
   const reviewerSession = await createTestSession(VERIFIED_BASE, {
     username: `kyc-reviewer-${Date.now()}`,
