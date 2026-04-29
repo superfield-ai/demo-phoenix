@@ -1899,3 +1899,32 @@ CREATE INDEX IF NOT EXISTS idx_rl_customer_health_scores_customer_id
 
 INSERT INTO _schema_version (migration) VALUES ('customer-health-scores-001')
   ON CONFLICT (migration) DO NOTHING;
+
+-- Issue #55: Account Manager customer health dashboard.
+-- Health score history: daily snapshots for sparkline / trend computation.
+CREATE TABLE IF NOT EXISTS rl_health_score_history (
+  id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  customer_id TEXT NOT NULL REFERENCES rl_customers (id) ON DELETE CASCADE,
+  score       NUMERIC(5, 4) NOT NULL,
+  recorded_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_health_score_history_customer
+  ON rl_health_score_history (customer_id, recorded_at DESC);
+
+-- Health signals: individual contributing factors for the current score.
+-- source_label is a human-readable name (e.g. 'payment_timeliness', 'usage').
+-- contribution is the signed impact on the overall health score (-1 to +1).
+CREATE TABLE IF NOT EXISTS rl_health_signals (
+  id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  customer_id   TEXT NOT NULL REFERENCES rl_customers (id) ON DELETE CASCADE,
+  source_label  TEXT NOT NULL,
+  contribution  NUMERIC(5, 4) NOT NULL,
+  recorded_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_health_signals_customer
+  ON rl_health_signals (customer_id, recorded_at DESC);
+
+INSERT INTO _schema_version (migration) VALUES ('account-manager-health-001')
+  ON CONFLICT (migration) DO NOTHING;

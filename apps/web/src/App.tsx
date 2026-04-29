@@ -11,6 +11,7 @@ import {
   BookOpen,
   Briefcase,
   ShieldCheck,
+  Activity,
 } from 'lucide-react';
 import { MobileInstallPage } from './pages/mobile-install';
 import { SettingsPage } from './pages/settings';
@@ -23,6 +24,7 @@ import { WikiViewPage } from './pages/wiki-view';
 import { CollectionQueuePage } from './pages/collection-queue';
 import { CollectionCaseDetailPage } from './pages/collection-case-detail';
 import { KycManualReviewPage } from './pages/kyc-manual-review';
+import { AccountManagerDashboardPage } from './pages/account-manager-dashboard';
 import { usePlatform } from './hooks/use-platform';
 import { isDismissalActive, DISMISSED_KEY } from './components/pwa/install-prompt';
 import { NotificationBell } from './components/NotificationBell';
@@ -41,7 +43,8 @@ type ActivePage =
   | 'cfo-dashboard'
   | 'wiki'
   | 'collection-queue'
-  | 'kyc-review';
+  | 'kyc-review'
+  | 'account-manager-dashboard';
 
 /** Returns true when the visitor is on a mobile platform (android or ios) */
 function isMobilePlatform(os: string): boolean {
@@ -114,7 +117,9 @@ function useIsMobileViewport(): boolean {
 function App() {
   const { user, logout, loading } = useAuth();
   const isMobileViewport = useIsMobileViewport();
-  const [activePage, setActivePage] = useState<ActivePage>('pipeline');
+  const defaultPage: ActivePage =
+    user?.role === 'account_manager' ? 'account-manager-dashboard' : 'pipeline';
+  const [activePage, setActivePage] = useState<ActivePage>(defaultPage);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [showWalkthrough, setShowWalkthrough] = useState<boolean | null>(null);
@@ -183,6 +188,9 @@ function App() {
     }
     if (activePage === 'kyc-review') {
       return <KycManualReviewPage />;
+    }
+    if (activePage === 'account-manager-dashboard') {
+      return <AccountManagerDashboardPage />;
     }
     return <SettingsPage />;
   }
@@ -256,6 +264,20 @@ function App() {
                 }`}
               >
                 <Briefcase size={20} strokeWidth={2.5} />
+              </button>
+            )}
+            {(user?.role === 'account_manager' || user?.isSuperadmin) && (
+              <button
+                title="Customer Health"
+                data-testid="nav-account-manager-dashboard"
+                onClick={() => setActivePage('account-manager-dashboard')}
+                className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                  activePage === 'account-manager-dashboard'
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+                }`}
+              >
+                <Activity size={20} strokeWidth={2.5} />
               </button>
             )}
             {(user?.isCfo || user?.isSuperadmin) && (
@@ -388,6 +410,18 @@ function App() {
             }`}
           >
             <Briefcase size={20} strokeWidth={2.5} />
+          </button>
+        )}
+        {(user?.role === 'account_manager' || user?.isSuperadmin) && (
+          <button
+            title="Customer Health"
+            data-testid="nav-account-manager-dashboard-mobile"
+            onClick={() => setActivePage('account-manager-dashboard')}
+            className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+              activePage === 'account-manager-dashboard' ? 'text-indigo-600' : 'text-zinc-400'
+            }`}
+          >
+            <Activity size={20} strokeWidth={2.5} />
           </button>
         )}
         {(user?.isCfo || user?.isSuperadmin) && (
