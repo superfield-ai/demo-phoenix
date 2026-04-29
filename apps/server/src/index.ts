@@ -73,6 +73,7 @@ import { handleCfoScheduledReportsRequest } from './api/cfo-scheduled-reports';
 import { handleLabelClearanceRequest } from './api/label-clearance';
 import { handleCfoRequest } from './api/cfo';
 import { handleCfoCollectionsRequest } from './api/cfo-collections';
+import { handleCollectionCasesRequest } from './api/collection-cases';
 
 // Starter behavior:
 // the server boot path auto-runs a local schema initializer for convenience.
@@ -548,6 +549,15 @@ export default {
     if (url.pathname.startsWith('/api/legal-holds')) {
       const legalHoldRes = await handleLegalHoldRequest(req, url, appState);
       if (legalHoldRes) return withTrace(legalHoldRes);
+    }
+
+    // Collections Agent case queue and contact logging (issue #49).
+    // GET    /api/collection-cases              — list cases for the logged-in agent
+    // GET    /api/collection-cases/:id          — case detail
+    // POST   /api/collection-cases/:id/contacts — log a contact attempt
+    if (url.pathname.startsWith('/api/collection-cases')) {
+      const collectionCasesRes = await handleCollectionCasesRequest(req, url, appState);
+      if (collectionCasesRes) return withTrace(collectionCasesRes);
     }
 
     // Dunning timeline (issue #48).

@@ -9,6 +9,7 @@ import {
   TrendingUp,
   HelpCircle,
   BookOpen,
+  Briefcase,
 } from 'lucide-react';
 import { MobileInstallPage } from './pages/mobile-install';
 import { SettingsPage } from './pages/settings';
@@ -18,6 +19,8 @@ import { PipelineBoardPage } from './pages/pipeline-board';
 import { CfoPortfolioPage } from './pages/cfo-portfolio';
 import { CfoDashboardPage } from './pages/cfo-dashboard';
 import { WikiViewPage } from './pages/wiki-view';
+import { CollectionQueuePage } from './pages/collection-queue';
+import { CollectionCaseDetailPage } from './pages/collection-case-detail';
 import { usePlatform } from './hooks/use-platform';
 import { isDismissalActive, DISMISSED_KEY } from './components/pwa/install-prompt';
 import { NotificationBell } from './components/NotificationBell';
@@ -28,7 +31,14 @@ import {
   resetOnboarding,
 } from './components/WalkthroughModal';
 
-type ActivePage = 'pipeline' | 'leads' | 'settings' | 'cfo-portfolio' | 'cfo-dashboard' | 'wiki';
+type ActivePage =
+  | 'pipeline'
+  | 'leads'
+  | 'settings'
+  | 'cfo-portfolio'
+  | 'cfo-dashboard'
+  | 'wiki'
+  | 'collection-queue';
 
 /** Returns true when the visitor is on a mobile platform (android or ios) */
 function isMobilePlatform(os: string): boolean {
@@ -103,6 +113,7 @@ function App() {
   const isMobileViewport = useIsMobileViewport();
   const [activePage, setActivePage] = useState<ActivePage>('pipeline');
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [showWalkthrough, setShowWalkthrough] = useState<boolean | null>(null);
 
   // Determine whether to show the walkthrough once we have user data
@@ -155,6 +166,17 @@ function App() {
     }
     if (activePage === 'wiki') {
       return <WikiViewPage customerId="demo" />;
+    }
+    if (activePage === 'collection-queue') {
+      if (selectedCaseId) {
+        return (
+          <CollectionCaseDetailPage
+            caseId={selectedCaseId}
+            onBack={() => setSelectedCaseId(null)}
+          />
+        );
+      }
+      return <CollectionQueuePage onSelectCase={(id) => setSelectedCaseId(id)} />;
     }
     return <SettingsPage />;
   }
@@ -213,6 +235,23 @@ function App() {
             >
               <BookOpen size={20} strokeWidth={2.5} />
             </button>
+            {(user?.role === 'collections_agent' || user?.isSuperadmin) && (
+              <button
+                title="Case Queue"
+                data-testid="nav-collection-queue"
+                onClick={() => {
+                  setActivePage('collection-queue');
+                  setSelectedCaseId(null);
+                }}
+                className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                  activePage === 'collection-queue'
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+                }`}
+              >
+                <Briefcase size={20} strokeWidth={2.5} />
+              </button>
+            )}
             {(user?.isCfo || user?.isSuperadmin) && (
               <button
                 title="CFO Portfolio"
@@ -317,6 +356,21 @@ function App() {
         >
           <BookOpen size={20} strokeWidth={2.5} />
         </button>
+        {(user?.role === 'collections_agent' || user?.isSuperadmin) && (
+          <button
+            title="Case Queue"
+            data-testid="nav-collection-queue-mobile"
+            onClick={() => {
+              setActivePage('collection-queue');
+              setSelectedCaseId(null);
+            }}
+            className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+              activePage === 'collection-queue' ? 'text-indigo-600' : 'text-zinc-400'
+            }`}
+          >
+            <Briefcase size={20} strokeWidth={2.5} />
+          </button>
+        )}
         {(user?.isCfo || user?.isSuperadmin) && (
           <button
             title="CFO Portfolio"

@@ -1568,6 +1568,23 @@ CREATE TABLE IF NOT EXISTS rl_payment_plans (
 CREATE INDEX IF NOT EXISTS idx_rl_payment_plans_collection_case_id
   ON rl_payment_plans (collection_case_id);
 
+-- Contact logs: human contact attempts made by a Collections Agent on a case.
+CREATE TABLE IF NOT EXISTS rl_contact_logs (
+  id                 TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  collection_case_id TEXT NOT NULL REFERENCES rl_collection_cases (id) ON DELETE CASCADE,
+  agent_id           TEXT NOT NULL,
+  contact_type       TEXT NOT NULL CHECK (contact_type IN ('call', 'email', 'portal')),
+  outcome            TEXT NOT NULL,
+  notes              TEXT,
+  contacted_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_contact_logs_collection_case_id
+  ON rl_contact_logs (collection_case_id);
+CREATE INDEX IF NOT EXISTS idx_rl_contact_logs_agent_id
+  ON rl_contact_logs (agent_id);
+
 -- Interventions: Account Manager–initiated actions for at-risk customers.
 CREATE TABLE IF NOT EXISTS rl_interventions (
   id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
