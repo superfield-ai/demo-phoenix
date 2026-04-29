@@ -78,6 +78,7 @@ import { handleCfoRequest } from './api/cfo';
 import { handleCfoCollectionsRequest } from './api/cfo-collections';
 import { handleCollectionCasesRequest } from './api/collection-cases';
 import { handleCustomersRequest } from './api/customers';
+import { handleAccountManagerRequest } from './api/account-manager';
 
 // Starter behavior:
 // the server boot path auto-runs a local schema initializer for convenience.
@@ -577,6 +578,14 @@ export default {
     if (url.pathname.startsWith('/api/write-off-approvals')) {
       const writeOffApprovalsRes = await handleWriteOffApprovalsRequest(req, url, appState);
       if (writeOffApprovalsRes) return withTrace(writeOffApprovalsRes);
+    }
+
+    // Account Manager customer health dashboard (issue #55).
+    // GET /api/account-manager/customers      — customers for the logged-in AM
+    // GET /api/account-manager/customers/:id  — customer health detail
+    if (url.pathname.startsWith('/api/account-manager')) {
+      const accountManagerRes = await handleAccountManagerRequest(req, url, appState);
+      if (accountManagerRes) return withTrace(accountManagerRes);
     }
 
     // Collections Agent case queue and contact logging (issue #49).

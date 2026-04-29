@@ -1123,6 +1123,59 @@ export async function seedDemoData({ sql }: SeedDemoDataOptions): Promise<void> 
   log('info', `[seed] ${CUSTOMERS.length} customers done.`);
 
   // ------------------------------------------------------------------
+  // 8b. Customer health signals and 30-day score history (issue #55)
+  // ------------------------------------------------------------------
+  const SIGNAL_SOURCES = [
+    'payment_timeliness',
+    'usage',
+    'support_tickets',
+    'contract_renewal',
+    'engagement',
+  ] as const;
+
+  for (const c of CUSTOMERS) {
+    // Seed 30 daily score history snapshots (with some noise).
+    for (let day = 30; day >= 0; day--) {
+      const recordedAt = new Date(Date.now() - day * 24 * 3600 * 1000).toISOString();
+      // Add ±5% noise around the final score to simulate realistic drift.
+      const noise = (Math.random() - 0.5) * 0.1;
+      const snapshotScore = Math.max(0.01, Math.min(0.99, c.health_score + noise));
+      await sql`
+        INSERT INTO rl_health_score_history (id, customer_id, score, recorded_at)
+        VALUES (
+          ${demoId(`hsh-${c.id}-${day}`)},
+          ${c.id},
+          ${parseFloat(snapshotScore.toFixed(4))},
+          ${recordedAt}
+        )
+        ON CONFLICT (id) DO NOTHING
+      `;
+    }
+
+    // Seed 3–4 contributing signals for each customer.
+    const numSignals = 3 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < numSignals; i++) {
+      const label = SIGNAL_SOURCES[i % SIGNAL_SOURCES.length];
+      // Healthy customers have mostly positive contributions.
+      const isHealthy = c.health_score >= 0.75;
+      const contribution = isHealthy
+        ? parseFloat((Math.random() * 0.15).toFixed(4))
+        : parseFloat((-0.05 - Math.random() * 0.2).toFixed(4));
+      await sql`
+        INSERT INTO rl_health_signals (id, customer_id, source_label, contribution)
+        VALUES (
+          ${demoId(`sig-${c.id}-${label}`)},
+          ${c.id},
+          ${label},
+          ${contribution}
+        )
+        ON CONFLICT (id) DO NOTHING
+      `;
+    }
+  }
+  log('info', '[seed] Customer health signals and score history done.');
+
+  // ------------------------------------------------------------------
   // 9. Deals — one per qualified prospect
   // ------------------------------------------------------------------
   const DEAL_STAGES = ['contacted', 'qualified', 'proposal', 'closed_won', 'closed_lost'] as const;
