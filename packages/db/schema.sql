@@ -1808,3 +1808,21 @@ ALTER TABLE rl_prospects
 
 INSERT INTO _schema_version (migration) VALUES ('cfo-portfolio-001')
   ON CONFLICT (migration) DO NOTHING;
+
+-- CFO Scheduled Reports: stores per-user report delivery configurations.
+-- Issue #18: one-click chart export and scheduled CFO report delivery.
+CREATE TABLE IF NOT EXISTS rl_cfo_scheduled_reports (
+  id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  user_id          TEXT NOT NULL,
+  frequency        TEXT NOT NULL CHECK (frequency IN ('weekly', 'monthly')),
+  format           TEXT NOT NULL CHECK (format IN ('pdf', 'csv')),
+  recipient_email  TEXT NOT NULL,
+  created_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_cfo_scheduled_reports_user_id
+  ON rl_cfo_scheduled_reports (user_id);
+
+INSERT INTO _schema_version (migration) VALUES ('cfo-scheduled-reports-001')
+  ON CONFLICT (migration) DO NOTHING;

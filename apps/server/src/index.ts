@@ -66,6 +66,7 @@ import { handleLegalHoldRequest } from './api/legal-hold';
 import { handleLeadsRequest } from './api/leads';
 import { handleNotificationsRequest } from './api/notifications';
 import { handleCfoPortfolioRequest } from './api/cfo-portfolio';
+import { handleCfoScheduledReportsRequest } from './api/cfo-scheduled-reports';
 import { handleLabelClearanceRequest } from './api/label-clearance';
 import { handleCfoRequest } from './api/cfo';
 import { handleCfoCollectionsRequest } from './api/cfo-collections';
@@ -484,6 +485,15 @@ export default {
     if (url.pathname === '/api/cfo/collections-performance') {
       const collectionsRes = await handleCfoCollectionsRequest(req, url, appState);
       if (collectionsRes) return withTrace(collectionsRes);
+    }
+
+    // Phase 2 CFO scheduled report CRUD (issue #18).
+    // POST   /api/cfo/scheduled-reports     — create a scheduled report config
+    // GET    /api/cfo/scheduled-reports     — list configs for authenticated user
+    // DELETE /api/cfo/scheduled-reports/:id — remove a config
+    if (url.pathname.startsWith('/api/cfo/scheduled-reports')) {
+      const schedRes = await handleCfoScheduledReportsRequest(req, url, appState);
+      if (schedRes) return withTrace(schedRes);
     }
 
     // Phase 2 CFO portfolio endpoints (issue #14).
