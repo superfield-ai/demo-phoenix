@@ -4,7 +4,8 @@ import { Login } from './components/Login';
 import { Settings, User, Users, KanbanSquare, TrendingUp, HelpCircle } from 'lucide-react';
 import { MobileInstallPage } from './pages/mobile-install';
 import { SettingsPage } from './pages/settings';
-import { LeadDetailPage, LeadQueuePage } from './pages/lead-detail';
+import { LeadDetailPage } from './pages/lead-detail';
+import { LeadQueuePage } from './pages/lead-queue';
 import { PipelineBoardPage } from './pages/pipeline-board';
 import { CfoPortfolioPage } from './pages/cfo-portfolio';
 import { usePlatform } from './hooks/use-platform';
@@ -122,14 +123,14 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-zinc-50 font-sans overflow-hidden text-zinc-900">
+    <div className="flex flex-col md:flex-row h-screen w-full bg-zinc-50 font-sans overflow-hidden text-zinc-900">
       {/* Onboarding walkthrough modal */}
       {showWalkthrough && walkthroughSteps && (
         <WalkthroughModal steps={walkthroughSteps} onClose={() => setShowWalkthrough(false)} />
       )}
 
-      {/* Left Sidebar */}
-      <nav className="w-16 shrink-0 border-r border-zinc-200 bg-white flex flex-col items-center py-6 justify-between z-10">
+      {/* Left Sidebar — visible on md+ */}
+      <nav className="hidden md:flex w-16 shrink-0 border-r border-zinc-200 bg-white flex-col items-center py-6 justify-between z-10">
         <div className="flex flex-col items-center gap-6">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm">
             <span className="text-white font-black text-lg">C</span>
@@ -211,11 +212,66 @@ function App() {
       </nav>
 
       {/* Main Application Area */}
-      <main className="flex-1 flex overflow-hidden relative">
-        <div className="flex-1 flex flex-col bg-white">
+      <main className="flex-1 flex overflow-hidden relative min-w-0">
+        <div className="flex-1 flex flex-col bg-white min-w-0">
           <div className="flex-1 overflow-hidden overflow-y-auto">{renderMain()}</div>
         </div>
       </main>
+
+      {/* Bottom Navigation — visible on mobile only */}
+      <nav
+        className="flex md:hidden shrink-0 border-t border-zinc-200 bg-white items-center justify-around px-2 py-1 z-10"
+        aria-label="Mobile navigation"
+      >
+        <button
+          title="Pipeline"
+          onClick={() => setActivePage('pipeline')}
+          className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+            activePage === 'pipeline' ? 'text-indigo-600' : 'text-zinc-400'
+          }`}
+        >
+          <KanbanSquare size={20} strokeWidth={2.5} />
+        </button>
+        <button
+          title="Lead queue"
+          onClick={() => {
+            setActivePage('leads');
+            setSelectedLeadId(null);
+          }}
+          className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+            activePage === 'leads' ? 'text-indigo-600' : 'text-zinc-400'
+          }`}
+        >
+          <Users size={20} strokeWidth={2.5} />
+        </button>
+        {(user?.isCfo || user?.isSuperadmin) && (
+          <button
+            title="CFO Portfolio"
+            onClick={() => setActivePage('cfo-portfolio')}
+            className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+              activePage === 'cfo-portfolio' ? 'text-indigo-600' : 'text-zinc-400'
+            }`}
+          >
+            <TrendingUp size={20} strokeWidth={2.5} />
+          </button>
+        )}
+        <button
+          title="Settings"
+          onClick={() => setActivePage('settings')}
+          className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+            activePage === 'settings' ? 'text-indigo-600' : 'text-zinc-400'
+          }`}
+        >
+          <Settings size={20} strokeWidth={2.5} />
+        </button>
+        <button
+          title="Logout"
+          onClick={logout}
+          className="flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all text-zinc-400 hover:text-red-500"
+        >
+          <User size={20} strokeWidth={2.5} />
+        </button>
+      </nav>
     </div>
   );
 }

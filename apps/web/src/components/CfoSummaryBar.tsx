@@ -97,7 +97,7 @@ function MetricTile({ label, value, sectionId, ariaLabel }: MetricTileProps) {
       aria-label={ariaLabel}
       data-section={sectionId}
       onClick={() => scrollToSection(sectionId)}
-      className="flex flex-col items-start gap-1 px-4 py-3 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md hover:border-blue-400 transition-all cursor-pointer min-w-[140px] text-left"
+      className="flex flex-col items-start gap-1 px-4 py-3 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md hover:border-blue-400 transition-all cursor-pointer min-w-[140px] text-left min-h-[44px]"
     >
       <span className="text-xs font-medium text-gray-500 uppercase tracking-wide leading-none">
         {label}
@@ -175,9 +175,9 @@ export function CfoSummaryBar() {
     <div
       aria-label="CFO executive summary bar"
       data-testid="cfo-summary-bar"
-      className="sticky top-0 z-10 w-full bg-gray-50 border-b border-gray-200 px-6 py-3"
+      className="sticky top-0 z-10 w-full bg-gray-50 border-b border-gray-200 px-6 py-3 overflow-x-auto"
     >
-      <div className="flex flex-wrap gap-3 items-start">
+      <div className="flex gap-3 items-start min-w-max lg:min-w-0 lg:flex-wrap">
         {/* Tile 1: Pipeline by tier */}
         <MetricTile
           label="Pipeline"
