@@ -62,10 +62,9 @@ async function loginViaTestSession(
   // Wait until the main nav is rendered (confirms auth passed).
   // The app renders nav-wiki in both the desktop sidebar (hidden md:flex) and
   // the mobile bottom nav (flex md:hidden). Exactly one is visible per viewport.
-  // Use .or() so the assertion passes whichever one is currently visible.
-  const wikiNavDesktop = page.getByTestId('nav-wiki').nth(0);
-  const wikiNavMobile = page.getByTestId('nav-wiki').nth(1);
-  await expect(wikiNavDesktop.or(wikiNavMobile)).toBeVisible({ timeout: 15_000 });
+  // waitForSelector with state:'visible' finds ANY matching element that becomes
+  // visible without strict-mode enforcement, which is what we need here.
+  await page.waitForSelector('[data-testid="nav-wiki"]', { state: 'visible', timeout: 15_000 });
 }
 
 /** Click whichever wiki nav button is currently visible. */
