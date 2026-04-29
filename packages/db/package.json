@@ -48,7 +48,8 @@
     "./collections-performance": "./collections-performance.ts",
     "./invoices": "./invoices.ts",
     "./dunning": "./dunning.ts",
-    "./collection-cases": "./collection-cases.ts"
+    "./collection-cases": "./collection-cases.ts",
+    "./payment-plans": "./payment-plans.ts"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"

@@ -66,6 +66,7 @@ import { handleComplianceRequest } from './api/compliance';
 import { handleLegalHoldRequest } from './api/legal-hold';
 import { handleInvoicesRequest } from './api/invoices';
 import { handleDunningRequest } from './api/dunning';
+import { handlePaymentPlansRequest } from './api/payment-plans';
 import { handleLeadsRequest } from './api/leads';
 import { handleNotificationsRequest } from './api/notifications';
 import { handleCfoPortfolioRequest } from './api/cfo-portfolio';
@@ -558,6 +559,14 @@ export default {
     if (url.pathname.startsWith('/api/collection-cases')) {
       const collectionCasesRes = await handleCollectionCasesRequest(req, url, appState);
       if (collectionCasesRes) return withTrace(collectionCasesRes);
+    }
+
+    // Payment-plan detail and status (issue #50).
+    // GET   /api/payment-plans/:id         — payment plan detail with schedule
+    // PATCH /api/payment-plans/:id/status  — update to breached or completed
+    if (url.pathname.startsWith('/api/payment-plans')) {
+      const paymentPlanRes = await handlePaymentPlansRequest(req, url, appState);
+      if (paymentPlanRes) return withTrace(paymentPlanRes);
     }
 
     // Dunning timeline (issue #48).
