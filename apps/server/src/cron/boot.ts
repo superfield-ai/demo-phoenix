@@ -20,6 +20,7 @@ import { registerCfoReportDeliveryJob } from './jobs/cfo-report-delivery';
 import { registerDunningEngineJob } from './jobs/dunning-engine';
 import { registerPaymentPlanMonitorJob } from './jobs/payment-plan-monitor';
 import { registerHealthScoreWorkerJob } from './jobs/health-score-worker';
+import { registerInterventionEscalationJob } from './jobs/intervention-escalation';
 
 let scheduler: CronScheduler | null = null;
 
@@ -49,6 +50,7 @@ export function startCronScheduler(): CronScheduler {
   registerDunningEngineJob(scheduler);
   registerPaymentPlanMonitorJob(scheduler);
   registerHealthScoreWorkerJob(scheduler);
+  registerInterventionEscalationJob(scheduler);
 
   scheduler.start();
   return scheduler;

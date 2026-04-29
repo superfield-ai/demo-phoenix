@@ -1928,3 +1928,25 @@ CREATE INDEX IF NOT EXISTS idx_rl_health_signals_customer
 
 INSERT INTO _schema_version (migration) VALUES ('account-manager-health-001')
   ON CONFLICT (migration) DO NOTHING;
+
+-- AM escalation notifications: created by the intervention escalation cron job
+-- when a health alert (open intervention) has been open >= INTERVENTION_ESCALATION_DAYS
+-- with no active intervention. Notified user is typically the team lead.
+-- Issue #56.
+CREATE TABLE IF NOT EXISTS rl_am_escalations (
+  id                TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  intervention_id   TEXT NOT NULL REFERENCES rl_interventions (id) ON DELETE CASCADE,
+  customer_id       TEXT NOT NULL REFERENCES rl_customers (id) ON DELETE CASCADE,
+  notified_user_id  TEXT NOT NULL,
+  days_open         INTEGER NOT NULL DEFAULT 0,
+  created_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (intervention_id, notified_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_am_escalations_intervention_id
+  ON rl_am_escalations (intervention_id);
+CREATE INDEX IF NOT EXISTS idx_rl_am_escalations_notified_user_id
+  ON rl_am_escalations (notified_user_id, created_at DESC);
+
+INSERT INTO _schema_version (migration) VALUES ('am-escalations-001')
+  ON CONFLICT (migration) DO NOTHING;
