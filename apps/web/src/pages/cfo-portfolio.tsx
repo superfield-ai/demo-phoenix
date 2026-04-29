@@ -17,7 +17,9 @@
  */
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { BarChart3, TrendingUp, Sliders, RotateCcw, Download } from 'lucide-react';
+import { BarChart3, TrendingUp, Sliders, RotateCcw, Bell } from 'lucide-react';
+import { ExportButton, type MacroScenarioState } from '../components/ExportButton';
+import { ScheduledReportModal, type ScheduledReport } from '../components/ScheduledReportModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -622,6 +624,10 @@ export function CfoPortfolioPage() {
   // Displayed segments (actual or scenario-recomputed)
   const [displayedSegments, setDisplayedSegments] = useState<PortfolioSegment[]>([]);
 
+  // Scheduled report modal
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduledReports, setScheduledReports] = useState<ScheduledReport[]>([]);
+
   const fetchAbortRef = useRef<AbortController | null>(null);
 
   // Fetch portfolio data
@@ -689,48 +695,6 @@ export function CfoPortfolioPage() {
     setDisplayedSegments(segments);
   };
 
-  const handleSaveScenario = () => {
-    const sliderState = {
-      interest_rate_delta_bps: interestRateDelta,
-      gdp_scenario: gdpScenario,
-      stressed_industries: stressedIndustries.join('|'),
-    };
-
-    const rows = [
-      [
-        'industry',
-        'company_segment',
-        'total_cltv',
-        'lead_count',
-        'average_composite_score',
-        'interest_rate_delta_bps',
-        'gdp_scenario',
-        'stressed_industries',
-      ],
-      ...displayedSegments.map((s) => [
-        s.industry,
-        s.company_segment,
-        String(s.total_cltv),
-        String(s.lead_count),
-        String(s.average_composite_score),
-        String(sliderState.interest_rate_delta_bps),
-        sliderState.gdp_scenario,
-        sliderState.stressed_industries,
-      ]),
-    ];
-
-    const csv = rows
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `cfo-scenario-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const toggleIndustryStress = (industry: string) => {
     setStressedIndustries((prev) =>
       prev.includes(industry) ? prev.filter((i) => i !== industry) : [...prev, industry],
@@ -790,12 +754,61 @@ export function CfoPortfolioPage() {
             <RotateCcw size={14} />
             Reset to actuals
           </button>
+          {/* One-click chart export (PDF) */}
+          <ExportButton
+            mode="chart"
+            scenarioState={
+              {
+                interest_rate_delta: interestRateDelta,
+                gdp_assumption: gdpScenario,
+                stressed_industries: stressedIndustries,
+              } satisfies MacroScenarioState
+            }
+            filename={`cfo-portfolio-${new Date().toISOString().slice(0, 10)}`}
+            ariaLabel="Export portfolio chart as PDF"
+          />
+          {/* One-click portfolio CSV export */}
+          <ExportButton
+            mode="csv"
+            csvRows={[
+              [
+                'industry',
+                'company_segment',
+                'total_cltv',
+                'lead_count',
+                'average_composite_score',
+              ],
+              ...displayedSegments.map((s) => [
+                s.industry,
+                s.company_segment,
+                String(s.total_cltv),
+                String(s.lead_count),
+                String(s.average_composite_score),
+              ]),
+            ]}
+            scenarioState={
+              {
+                interest_rate_delta: interestRateDelta,
+                gdp_assumption: gdpScenario,
+                stressed_industries: stressedIndustries,
+              } satisfies MacroScenarioState
+            }
+            filename={`cfo-portfolio-${new Date().toISOString().slice(0, 10)}`}
+          />
+          {/* Schedule recurring report */}
           <button
-            onClick={handleSaveScenario}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-indigo-600 border border-indigo-200 hover:bg-indigo-50 transition-colors"
+            onClick={() => setShowScheduleModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-zinc-600 border border-zinc-200 hover:bg-zinc-50 transition-colors"
+            aria-label="Schedule recurring report"
+            title={`Schedule recurring report${scheduledReports.length > 0 ? ` (${scheduledReports.length} active)` : ''}`}
           >
-            <Download size={14} />
-            Save scenario
+            <Bell size={14} />
+            Schedule
+            {scheduledReports.length > 0 && (
+              <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium">
+                {scheduledReports.length}
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -973,11 +986,39 @@ export function CfoPortfolioPage() {
         </div>
       </div>
 
-      {/* Segment table */}
+      {/* Segment table — with one-click CSV export */}
       {displayedSegments.length > 0 && (
         <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-zinc-100 text-sm font-medium text-zinc-700">
-            Segment breakdown
+          <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-100">
+            <span className="text-sm font-medium text-zinc-700">Segment breakdown</span>
+            <ExportButton
+              mode="csv"
+              csvRows={[
+                [
+                  'industry',
+                  'company_segment',
+                  'total_cltv',
+                  'lead_count',
+                  'average_composite_score',
+                ],
+                ...displayedSegments.map((s) => [
+                  s.industry,
+                  s.company_segment,
+                  String(s.total_cltv),
+                  String(s.lead_count),
+                  String(s.average_composite_score),
+                ]),
+              ]}
+              scenarioState={
+                {
+                  interest_rate_delta: interestRateDelta,
+                  gdp_assumption: gdpScenario,
+                  stressed_industries: stressedIndustries,
+                } satisfies MacroScenarioState
+              }
+              filename={`cfo-segments-${new Date().toISOString().slice(0, 10)}`}
+              ariaLabel="Export segment breakdown as CSV"
+            />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -1035,6 +1076,14 @@ export function CfoPortfolioPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Scheduled report modal */}
+      {showScheduleModal && (
+        <ScheduledReportModal
+          onClose={() => setShowScheduleModal(false)}
+          onCreated={(report) => setScheduledReports((prev) => [report, ...prev])}
+        />
       )}
     </div>
   );
