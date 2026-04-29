@@ -1,21 +1,24 @@
 /**
  * @file pages/cfo-dashboard
  *
- * CFO dashboard page — Phase 2 P2-1 (issue #12).
+ * CFO dashboard page — Phase 2 P2-1 (issue #12), P2-4 AR aging (issue #16).
  *
  * Renders the executive summary bar at the top and placeholder sections for
- * each chart (P2-2 through P2-5). Each section has a stable id so the
- * summary bar tiles can scroll to them.
+ * each chart. Each section has a stable id so the summary bar tiles can
+ * scroll to them.
  *
  * Accessible only to authenticated users with role 'cfo' or 'finance_controller'.
  *
  * Canonical docs: docs/prd.md
- * Issue: https://github.com/superfield-ai/demo-phoenix/issues/12
+ * Issues:
+ *   https://github.com/superfield-ai/demo-phoenix/issues/12
+ *   https://github.com/superfield-ai/demo-phoenix/issues/16
  */
 
 import React from 'react';
 import { CfoSummaryBar } from '../components/CfoSummaryBar';
 import { TierTrendChart } from '../components/TierTrendChart';
+import { ArAgingChart } from '../components/ArAgingChart';
 
 export function CfoDashboardPage() {
   return (
@@ -60,9 +63,7 @@ export function CfoDashboardPage() {
           <h2 id="section-ar-aging-heading" className="text-lg font-semibold text-gray-800 mb-4">
             AR Aging
           </h2>
-          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-gray-400">
-            AR aging chart — coming in P2-4
-          </div>
+          <ArAgingChart />
         </section>
 
         {/* Section: Collection recovery */}
