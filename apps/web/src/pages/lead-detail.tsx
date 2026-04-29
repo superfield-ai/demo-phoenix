@@ -422,6 +422,7 @@ function KycSummaryPanel({
       {isManualReview && (
         <button
           type="button"
+          data-testid="kyc-retrigger-btn"
           onClick={onRetrigger}
           className="flex items-center gap-2 text-xs font-medium text-indigo-600 hover:text-indigo-700 mt-1"
         >
