@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './components/Login';
-import { Settings, User, Users, KanbanSquare, TrendingUp, HelpCircle } from 'lucide-react';
+import {
+  Settings,
+  User,
+  Users,
+  KanbanSquare,
+  TrendingUp,
+  HelpCircle,
+  BookOpen,
+} from 'lucide-react';
 import { MobileInstallPage } from './pages/mobile-install';
 import { SettingsPage } from './pages/settings';
 import { LeadDetailPage } from './pages/lead-detail';
 import { LeadQueuePage } from './pages/lead-queue';
 import { PipelineBoardPage } from './pages/pipeline-board';
 import { CfoPortfolioPage } from './pages/cfo-portfolio';
+import { WikiViewPage } from './pages/wiki-view';
 import { usePlatform } from './hooks/use-platform';
 import { isDismissalActive, DISMISSED_KEY } from './components/pwa/install-prompt';
 import { NotificationBell } from './components/NotificationBell';
@@ -18,7 +27,7 @@ import {
   resetOnboarding,
 } from './components/WalkthroughModal';
 
-type ActivePage = 'pipeline' | 'leads' | 'settings' | 'cfo-portfolio';
+type ActivePage = 'pipeline' | 'leads' | 'settings' | 'cfo-portfolio' | 'wiki';
 
 /** Returns true when the visitor is on a mobile platform (android or ios) */
 function isMobilePlatform(os: string): boolean {
@@ -68,8 +77,29 @@ function getWalkthroughSteps(role: string | null | undefined, isCfo: boolean | u
   return null;
 }
 
+/**
+ * Returns true when the viewport is narrower than Tailwind's md breakpoint
+ * (768 px). Updates reactively via matchMedia. Used to assign data-testid to
+ * exactly one nav-wiki button so Playwright selectors have a unique target.
+ */
+function useIsMobileViewport(): boolean {
+  const query = typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)') : null;
+  const [isMobile, setIsMobile] = useState(() => query?.matches ?? false);
+
+  React.useEffect(() => {
+    if (!query) return;
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    query.addEventListener('change', handler);
+    setIsMobile(query.matches);
+    return () => query.removeEventListener('change', handler);
+  }, []); // query is stable — computed once at module init, never reassigned
+
+  return isMobile;
+}
+
 function App() {
   const { user, logout, loading } = useAuth();
+  const isMobileViewport = useIsMobileViewport();
   const [activePage, setActivePage] = useState<ActivePage>('pipeline');
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [showWalkthrough, setShowWalkthrough] = useState<boolean | null>(null);
@@ -119,6 +149,9 @@ function App() {
     if (activePage === 'cfo-portfolio') {
       return <CfoPortfolioPage />;
     }
+    if (activePage === 'wiki') {
+      return <WikiViewPage customerId="demo" />;
+    }
     return <SettingsPage />;
   }
 
@@ -164,6 +197,18 @@ function App() {
                 setSelectedLeadId(prospectId);
               }}
             />
+            <button
+              {...(!isMobileViewport ? { 'data-testid': 'nav-wiki' } : {})}
+              title="Wiki"
+              onClick={() => setActivePage('wiki')}
+              className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                activePage === 'wiki'
+                  ? 'bg-indigo-50 text-indigo-600'
+                  : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+              }`}
+            >
+              <BookOpen size={20} strokeWidth={2.5} />
+            </button>
             {(user?.isCfo || user?.isSuperadmin) && (
               <button
                 title="CFO Portfolio"
@@ -243,6 +288,16 @@ function App() {
           }`}
         >
           <Users size={20} strokeWidth={2.5} />
+        </button>
+        <button
+          {...(isMobileViewport ? { 'data-testid': 'nav-wiki' } : {})}
+          title="Wiki"
+          onClick={() => setActivePage('wiki')}
+          className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+            activePage === 'wiki' ? 'text-indigo-600' : 'text-zinc-400'
+          }`}
+        >
+          <BookOpen size={20} strokeWidth={2.5} />
         </button>
         {(user?.isCfo || user?.isSuperadmin) && (
           <button

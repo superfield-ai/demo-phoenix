@@ -60,6 +60,10 @@ async function loginViaTestSession(
   }
 
   // Wait until the main nav is rendered (confirms auth passed).
+  // The app assigns data-testid="nav-wiki" to exactly one button per viewport:
+  // the desktop sidebar button when viewport ≥ 768 px, the mobile bottom nav
+  // button when viewport < 768 px. The testid is toggled via a matchMedia hook
+  // so there is always exactly one element with this testid.
   await expect(page.getByTestId('nav-wiki')).toBeVisible({ timeout: 15_000 });
 }
 
