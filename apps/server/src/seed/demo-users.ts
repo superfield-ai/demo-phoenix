@@ -3,9 +3,11 @@
  * Idempotent seeding of demo role accounts for DEMO_MODE deployments.
  *
  * Seeds one user per demo role that doesn't already exist:
- *   - account_manager  → "Account Manager" role
- *   - supervisor       → "Supervisor" role
- *   - cfo              → "CFO" role (Phase 2 portfolio dashboard)
+ *   - sales_rep          → "Sales Rep" role
+ *   - cfo                → "CFO" role
+ *   - collections_agent  → "Collections Agent" role
+ *   - finance_controller → "Finance Controller" role
+ *   - account_manager    → "Account Manager" role
  *
  * The superuser account is seeded separately by seedSuperuser().
  * This function is a no-op when DEMO_MODE is not set.
@@ -21,9 +23,11 @@ export interface SeedDemoUsersOptions {
 }
 
 const DEMO_ROLES = [
-  { role: 'account_manager', username: 'demo-account-manager' },
-  { role: 'supervisor', username: 'demo-supervisor' },
+  { role: 'sales_rep', username: 'demo-sales-rep' },
   { role: 'cfo', username: 'demo-cfo' },
+  { role: 'collections_agent', username: 'demo-collections-agent' },
+  { role: 'finance_controller', username: 'demo-finance-controller' },
+  { role: 'account_manager', username: 'demo-account-manager' },
 ] as const;
 
 /**
