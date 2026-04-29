@@ -16,6 +16,7 @@ import { LeadDetailPage } from './pages/lead-detail';
 import { LeadQueuePage } from './pages/lead-queue';
 import { PipelineBoardPage } from './pages/pipeline-board';
 import { CfoPortfolioPage } from './pages/cfo-portfolio';
+import { CfoDashboardPage } from './pages/cfo-dashboard';
 import { WikiViewPage } from './pages/wiki-view';
 import { usePlatform } from './hooks/use-platform';
 import { isDismissalActive, DISMISSED_KEY } from './components/pwa/install-prompt';
@@ -27,7 +28,7 @@ import {
   resetOnboarding,
 } from './components/WalkthroughModal';
 
-type ActivePage = 'pipeline' | 'leads' | 'settings' | 'cfo-portfolio' | 'wiki';
+type ActivePage = 'pipeline' | 'leads' | 'settings' | 'cfo-portfolio' | 'cfo-dashboard' | 'wiki';
 
 /** Returns true when the visitor is on a mobile platform (android or ios) */
 function isMobilePlatform(os: string): boolean {
@@ -149,6 +150,9 @@ function App() {
     if (activePage === 'cfo-portfolio') {
       return <CfoPortfolioPage />;
     }
+    if (activePage === 'cfo-dashboard') {
+      return <CfoDashboardPage />;
+    }
     if (activePage === 'wiki') {
       return <WikiViewPage customerId="demo" />;
     }
@@ -215,6 +219,20 @@ function App() {
                 onClick={() => setActivePage('cfo-portfolio')}
                 className={`p-3 rounded-xl flex items-center justify-center transition-all ${
                   activePage === 'cfo-portfolio'
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+                }`}
+              >
+                <TrendingUp size={20} strokeWidth={2.5} />
+              </button>
+            )}
+            {(user?.role === 'finance_controller' || user?.isSuperadmin) && (
+              <button
+                title="CFO Dashboard"
+                data-testid="nav-cfo-dashboard"
+                onClick={() => setActivePage('cfo-dashboard')}
+                className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                  activePage === 'cfo-dashboard'
                     ? 'bg-indigo-50 text-indigo-600'
                     : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
                 }`}
@@ -305,6 +323,18 @@ function App() {
             onClick={() => setActivePage('cfo-portfolio')}
             className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
               activePage === 'cfo-portfolio' ? 'text-indigo-600' : 'text-zinc-400'
+            }`}
+          >
+            <TrendingUp size={20} strokeWidth={2.5} />
+          </button>
+        )}
+        {(user?.role === 'finance_controller' || user?.isSuperadmin) && (
+          <button
+            title="CFO Dashboard"
+            data-testid="nav-cfo-dashboard-mobile"
+            onClick={() => setActivePage('cfo-dashboard')}
+            className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+              activePage === 'cfo-dashboard' ? 'text-indigo-600' : 'text-zinc-400'
             }`}
           >
             <TrendingUp size={20} strokeWidth={2.5} />
