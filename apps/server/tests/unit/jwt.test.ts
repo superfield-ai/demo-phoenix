@@ -310,3 +310,81 @@ describe('key rotation', () => {
     expect(keys[0].kid).not.toBe(keys[1].kid);
   });
 });
+
+// ---------------------------------------------------------------------------
+// SESSION_TIMEOUT_HOURS enforcement (issue #88)
+// ---------------------------------------------------------------------------
+
+describe('SESSION_TIMEOUT_HOURS enforcement in signJwt', () => {
+  const originalEnv = process.env.SESSION_TIMEOUT_HOURS;
+
+  function restoreEnv() {
+    if (originalEnv === undefined) {
+      delete process.env.SESSION_TIMEOUT_HOURS;
+    } else {
+      process.env.SESSION_TIMEOUT_HOURS = originalEnv;
+    }
+  }
+
+  test('caps expiresInHours to SESSION_TIMEOUT_HOURS when the cap is lower', async () => {
+    process.env.SESSION_TIMEOUT_HOURS = '1'; // 1 hour cap
+    try {
+      const before = Math.floor(Date.now() / 1000);
+      const token = await signJwt({ sub: 'cap-test' }, 24 * 7); // request 7 days
+      const [, encodedPayload] = token.split('.');
+      const payload = JSON.parse(base64UrlDecode(encodedPayload)) as { exp: number };
+      // exp should be ~1 hour from now, not 7 days
+      const diffHours = (payload.exp - before) / 3600;
+      expect(diffHours).toBeGreaterThanOrEqual(0.99);
+      expect(diffHours).toBeLessThanOrEqual(1.01);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  test('does not increase expiresInHours when SESSION_TIMEOUT_HOURS is higher', async () => {
+    process.env.SESSION_TIMEOUT_HOURS = '100'; // 100 hour cap
+    try {
+      const before = Math.floor(Date.now() / 1000);
+      const token = await signJwt({ sub: 'no-cap-test' }, 1); // request 1 hour
+      const [, encodedPayload] = token.split('.');
+      const payload = JSON.parse(base64UrlDecode(encodedPayload)) as { exp: number };
+      // exp should be ~1 hour, not 100
+      const diffHours = (payload.exp - before) / 3600;
+      expect(diffHours).toBeGreaterThanOrEqual(0.99);
+      expect(diffHours).toBeLessThanOrEqual(1.01);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  test('uses the full requested expiresInHours when SESSION_TIMEOUT_HOURS is absent', async () => {
+    delete process.env.SESSION_TIMEOUT_HOURS;
+    try {
+      const before = Math.floor(Date.now() / 1000);
+      const token = await signJwt({ sub: 'no-env-test' }, 2);
+      const [, encodedPayload] = token.split('.');
+      const payload = JSON.parse(base64UrlDecode(encodedPayload)) as { exp: number };
+      const diffHours = (payload.exp - before) / 3600;
+      expect(diffHours).toBeGreaterThanOrEqual(1.99);
+      expect(diffHours).toBeLessThanOrEqual(2.01);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  test('ignores SESSION_TIMEOUT_HOURS when it is not a positive number', async () => {
+    process.env.SESSION_TIMEOUT_HOURS = 'bad-value';
+    try {
+      const before = Math.floor(Date.now() / 1000);
+      const token = await signJwt({ sub: 'bad-env-test' }, 3);
+      const [, encodedPayload] = token.split('.');
+      const payload = JSON.parse(base64UrlDecode(encodedPayload)) as { exp: number };
+      const diffHours = (payload.exp - before) / 3600;
+      expect(diffHours).toBeGreaterThanOrEqual(2.99);
+      expect(diffHours).toBeLessThanOrEqual(3.01);
+    } finally {
+      restoreEnv();
+    }
+  });
+});

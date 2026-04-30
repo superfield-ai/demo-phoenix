@@ -143,7 +143,14 @@ export async function handleDemoSessionRequest(
         isSupervisor: isSuperadmin || u.role === 'supervisor',
       };
 
-      const token = await signJwt({ id: u.id, username: u.username });
+      // Demo sessions use SESSION_TIMEOUT_HOURS (default 8) instead of the
+      // library default (7 days) so demo JWTs expire within the demo window.
+      const demoSessionHours = (() => {
+        const raw = process.env.SESSION_TIMEOUT_HOURS;
+        const parsed = raw ? parseFloat(raw) : NaN;
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 8;
+      })();
+      const token = await signJwt({ id: u.id, username: u.username }, demoSessionHours);
       const csrfToken = generateCsrfToken();
 
       const res = new Response(
