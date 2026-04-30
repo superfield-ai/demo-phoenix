@@ -1,6 +1,6 @@
 import { describe, test, expect, vi, afterEach } from 'vitest';
 import { handleUsersRequest } from '../../src/api/users';
-import * as adminModule from '../../src/api/admin';
+import * as responseModule from '../../src/lib/response';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -75,7 +75,7 @@ describe('handleUsersRequest()', () => {
       username: 'caller',
     });
     // Caller is a superuser so the authorisation check passes before the 404
-    vi.spyOn(adminModule, 'isSuperuser').mockReturnValue(true);
+    vi.spyOn(responseModule, 'isSuperuser').mockReturnValue(true);
 
     const appState = makeAppState([], [{ count: '0' }]);
 
@@ -92,7 +92,7 @@ describe('handleUsersRequest()', () => {
       username: 'caller',
     });
     // Caller is a superuser so the authorisation check passes
-    vi.spyOn(adminModule, 'isSuperuser').mockReturnValue(true);
+    vi.spyOn(responseModule, 'isSuperuser').mockReturnValue(true);
 
     // Target user is a superuser
     const targetUser = { id: 'super-id', properties: { role: 'superuser', username: 'admin' } };
@@ -127,7 +127,7 @@ describe('handleUsersRequest()', () => {
       username: 'caller',
     });
     // Caller is a superuser so the authorisation check passes
-    vi.spyOn(adminModule, 'isSuperuser').mockReturnValue(true);
+    vi.spyOn(responseModule, 'isSuperuser').mockReturnValue(true);
 
     const targetUser = { id: 'super-id', properties: { role: 'superuser', username: 'admin' } };
     const countRow = [{ count: '2' }];
@@ -161,7 +161,7 @@ describe('handleUsersRequest()', () => {
       username: 'caller',
     });
     // Caller is NOT a superuser
-    vi.spyOn(adminModule, 'isSuperuser').mockReturnValue(false);
+    vi.spyOn(responseModule, 'isSuperuser').mockReturnValue(false);
 
     const targetUser = { id: 'other-id', properties: { username: 'other' } };
 
@@ -191,7 +191,7 @@ describe('handleUsersRequest()', () => {
       username: 'self',
     });
     // Caller is NOT a superuser, but deletes their own account
-    vi.spyOn(adminModule, 'isSuperuser').mockReturnValue(false);
+    vi.spyOn(responseModule, 'isSuperuser').mockReturnValue(false);
 
     const targetUser = { id: 'self-id', properties: { username: 'self' } };
 
@@ -223,7 +223,7 @@ describe('handleUsersRequest()', () => {
       username: 'caller',
     });
     // Caller is a superuser so the authorisation check passes
-    vi.spyOn(adminModule, 'isSuperuser').mockReturnValue(true);
+    vi.spyOn(responseModule, 'isSuperuser').mockReturnValue(true);
 
     const targetUser = { id: 'regular-id', properties: { username: 'bob' } };
 

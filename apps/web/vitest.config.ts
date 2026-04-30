@@ -4,5 +4,6 @@ export default defineConfig({
   test: {
     include: ['tests/unit/**/*.test.ts', 'vite.config.test.ts'],
     exclude: ['tests/component/**'],
+    setupFiles: ['tests/unit/setup.ts'],
   },
 });

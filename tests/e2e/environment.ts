@@ -27,7 +27,7 @@ export async function startE2EServer(): Promise<E2EEnvironment> {
   await applyAuditSchema(pg.url);
 
   // Migrate the audit schema into the same ephemeral pg container so that
-  // audit-before-write endpoints (transcript ingestion, wiki writes, etc.)
+  // audit-before-write endpoints (transcript ingestion, etc.)
   // can succeed in the test environment.
   await migrateAuditSchema(pg.url);
 
@@ -37,8 +37,7 @@ export async function startE2EServer(): Promise<E2EEnvironment> {
       ...process.env,
       DATABASE_URL: pg.url,
       // Route audit writes to the same test Postgres container so
-      // POST /internal/wiki/versions and other audit-guarded endpoints work
-      // without an external audit database.
+      // audit-guarded endpoints work without an external audit database.
       AUDIT_DATABASE_URL: pg.url,
       PORT: String(SERVER_PORT),
       // Enable the test-session backdoor so integration tests can obtain
@@ -72,17 +71,8 @@ export async function stopE2EServer(context: E2EEnvironment): Promise<void> {
  * The main migrate() call covers the app schema. The audit_events table lives
  * in a separate schema file (packages/db/audit-schema.sql) and is normally
  * created by init-remote.ts at deploy time. For E2E tests we apply it directly
- * to the same pg container so audit-gated endpoints (e.g. POST
- * /internal/wiki/versions) succeed without a separate audit database.
- */
-/**
- * Apply the audit schema DDL to the test Postgres container.
- *
- * The main migrate() call covers the app schema. The audit_events table lives
- * in a separate schema file (packages/db/audit-schema.sql) and is normally
- * created by init-remote.ts at deploy time. For E2E tests we apply it directly
- * to the same pg container so audit-gated endpoints (e.g. POST
- * /internal/wiki/versions) succeed without a separate audit database.
+ * to the same pg container so audit-gated endpoints succeed without a separate
+ * audit database.
  */
 async function applyAuditSchema(pgUrl: string): Promise<void> {
   const sql = postgres(pgUrl, { max: 1, idle_timeout: 5, connect_timeout: 10 });

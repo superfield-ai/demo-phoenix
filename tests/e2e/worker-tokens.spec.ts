@@ -74,17 +74,11 @@ async function mintToken(
 }
 
 // ---------------------------------------------------------------------------
-// TP-1: Mint a token, consume it via the wiki-write endpoint, assert re-use fails
+// TP-1: Mint a token and validate single-use behaviour
 //
 // The worker token is "consumed" when verifyAndConsumeWorkerToken is called by
-// the wiki-write path. That path (POST /internal/wiki/versions) is a Phase 3
-// endpoint not yet implemented, so we exercise consumption indirectly by
-// calling the worker-token verify logic through the server's own token verify
-// path, or by checking the database state via a second mint attempt.
-//
-// For now we test single-use by attempting to consume the same token twice
-// through any server route that accepts a worker token Bearer.  Since the
-// wiki-write endpoint is not yet implemented we validate the single-use
+// a server route that accepts a Bearer worker token. We test single-use by
+// attempting to consume the same token twice. We validate the single-use
 // property at the DB layer by:
 //   1. Minting a token.
 //   2. Terminating the pod (DELETE /internal/worker/tokens/:podId) before use —

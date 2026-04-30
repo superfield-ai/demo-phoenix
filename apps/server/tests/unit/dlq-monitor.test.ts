@@ -106,15 +106,30 @@ describe('TaskType enum (issue #95)', () => {
     expect(TaskType.BDM_SUMMARY).toBe('BDM_SUMMARY');
   });
 
-  test('all 6 TaskType values are present', () => {
+  test('KYC_VERIFY is defined', () => {
+    expect(TaskType.KYC_VERIFY).toBe('KYC_VERIFY');
+  });
+
+  test('RESCORE is defined', () => {
+    expect(TaskType.RESCORE).toBe('RESCORE');
+  });
+
+  test('RESCORE_SCHEDULE is defined', () => {
+    expect(TaskType.RESCORE_SCHEDULE).toBe('RESCORE_SCHEDULE');
+  });
+
+  test('all 9 TaskType values are present', () => {
     const values = Object.values(TaskType);
-    expect(values).toHaveLength(6);
+    expect(values).toHaveLength(9);
     expect(values).toContain('EMAIL_INGEST');
     expect(values).toContain('AUTOLEARN');
     expect(values).toContain('TRANSCRIPTION');
     expect(values).toContain('ANNOTATION');
     expect(values).toContain('DEEPCLEAN');
     expect(values).toContain('BDM_SUMMARY');
+    expect(values).toContain('KYC_VERIFY');
+    expect(values).toContain('RESCORE');
+    expect(values).toContain('RESCORE_SCHEDULE');
   });
 });
 
@@ -145,9 +160,21 @@ describe('TASK_TYPE_AGENT_MAP (issue #95)', () => {
     expect(TASK_TYPE_AGENT_MAP[TaskType.BDM_SUMMARY]).toBe('bdm_summary');
   });
 
-  test('all 6 TaskType values are mapped', () => {
+  test('KYC_VERIFY maps to kyc_verify', () => {
+    expect(TASK_TYPE_AGENT_MAP[TaskType.KYC_VERIFY]).toBe('kyc_verify');
+  });
+
+  test('RESCORE maps to rescore', () => {
+    expect(TASK_TYPE_AGENT_MAP[TaskType.RESCORE]).toBe('rescore');
+  });
+
+  test('RESCORE_SCHEDULE maps to rescore_schedule', () => {
+    expect(TASK_TYPE_AGENT_MAP[TaskType.RESCORE_SCHEDULE]).toBe('rescore_schedule');
+  });
+
+  test('all 9 TaskType values are mapped', () => {
     const keys = Object.keys(TASK_TYPE_AGENT_MAP);
-    expect(keys).toHaveLength(6);
+    expect(keys).toHaveLength(9);
   });
 
   test('each agent_type string is lowercase with underscores', () => {
