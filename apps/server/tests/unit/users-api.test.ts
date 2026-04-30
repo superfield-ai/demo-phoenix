@@ -1,6 +1,5 @@
 import { describe, test, expect, vi, afterEach } from 'vitest';
 import { handleUsersRequest } from '../../src/api/users';
-import * as adminModule from '../../src/api/admin';
 import * as responseModule from '../../src/lib/response';
 
 // ---------------------------------------------------------------------------
