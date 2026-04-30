@@ -99,7 +99,13 @@ function getWalkthroughSteps(
 
 function App() {
   const { user, logout, loading } = useAuth();
-  const defaultPage: ActivePage = deriveDefaultPage(user?.role, user?.isCfo, user?.isBdm);
+  const isPipelineRole = user?.role === 'sales_rep' || user?.isSuperadmin;
+  const defaultPage: ActivePage = deriveDefaultPage(
+    user?.role,
+    user?.isCfo,
+    user?.isBdm,
+    user?.isSuperadmin,
+  );
   const [activePage, setActivePage] = useState<ActivePage>(defaultPage);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
@@ -135,8 +141,20 @@ function App() {
 
   const walkthroughSteps = getWalkthroughSteps(user.role, user.isCfo, user.isBdm);
 
+  // Route guard: redirect non-pipeline roles away from the pipeline page.
+  // This handles direct URL navigation or stale state from a previous session.
+  React.useEffect(() => {
+    if (activePage === 'pipeline' && !isPipelineRole) {
+      setActivePage(defaultPage === 'pipeline' ? 'settings' : defaultPage);
+    }
+  }, [activePage, isPipelineRole, defaultPage]);
+
   function renderMain() {
     if (activePage === 'pipeline') {
+      if (!isPipelineRole) {
+        // Render nothing while the redirect effect fires.
+        return null;
+      }
       return <PipelineBoardPage />;
     }
     if (activePage === 'leads') {
@@ -191,17 +209,20 @@ function App() {
           </div>
 
           <div className="flex flex-col gap-4 mt-4 w-full px-2">
-            <button
-              title="Pipeline"
-              onClick={() => setActivePage('pipeline')}
-              className={`p-3 rounded-xl flex items-center justify-center transition-all ${
-                activePage === 'pipeline'
-                  ? 'bg-indigo-50 text-indigo-600'
-                  : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
-              }`}
-            >
-              <KanbanSquare size={20} strokeWidth={2.5} />
-            </button>
+            {isPipelineRole && (
+              <button
+                title="Pipeline"
+                data-testid="nav-pipeline"
+                onClick={() => setActivePage('pipeline')}
+                className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                  activePage === 'pipeline'
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+                }`}
+              >
+                <KanbanSquare size={20} strokeWidth={2.5} />
+              </button>
+            )}
             <button
               onClick={() => {
                 setActivePage('leads');
@@ -349,15 +370,18 @@ function App() {
         className="flex md:hidden shrink-0 border-t border-zinc-200 bg-white items-center justify-around px-2 py-1 z-10"
         aria-label="Mobile navigation"
       >
-        <button
-          title="Pipeline"
-          onClick={() => setActivePage('pipeline')}
-          className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
-            activePage === 'pipeline' ? 'text-indigo-600' : 'text-zinc-400'
-          }`}
-        >
-          <KanbanSquare size={20} strokeWidth={2.5} />
-        </button>
+        {isPipelineRole && (
+          <button
+            title="Pipeline"
+            data-testid="nav-pipeline-mobile"
+            onClick={() => setActivePage('pipeline')}
+            className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+              activePage === 'pipeline' ? 'text-indigo-600' : 'text-zinc-400'
+            }`}
+          >
+            <KanbanSquare size={20} strokeWidth={2.5} />
+          </button>
+        )}
         <button
           title="Lead queue"
           onClick={() => {
