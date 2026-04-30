@@ -177,10 +177,29 @@ export async function getJwks(): Promise<{ keys: object[] }> {
 }
 
 /**
+ * Returns the configured session timeout in hours.
+ *
+ * Reads SESSION_TIMEOUT_HOURS from the environment; falls back to the supplied
+ * default when the variable is absent or unparseable.
+ */
+function resolveExpiresInHours(requestedHours: number): number {
+  const raw = process.env.SESSION_TIMEOUT_HOURS;
+  if (!raw) return requestedHours;
+  const cap = parseFloat(raw);
+  if (!Number.isFinite(cap) || cap <= 0) return requestedHours;
+  return Math.min(requestedHours, cap);
+}
+
+/**
  * Signs a payload generating a JWT token using ES256 (ECDSA P-256) via WebCrypto.
  * A `jti` (JWT ID) claim is added automatically for revocation tracking.
+ *
+ * The effective TTL is the minimum of the requested `expiresInHours` and the
+ * SESSION_TIMEOUT_HOURS environment variable (default: no cap applied when the
+ * env var is absent).
  */
 export async function signJwt(payload: object, expiresInHours = 24 * 7): Promise<string> {
+  expiresInHours = resolveExpiresInHours(expiresInHours);
   const keyPair = await getCurrentKeyPair();
   const header = { alg: 'ES256', typ: 'JWT', kid: keyPair.kid };
   const exp = Math.floor(Date.now() / 1000) + expiresInHours * 60 * 60;
