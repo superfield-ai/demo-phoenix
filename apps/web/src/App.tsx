@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Activity,
   BarChart2,
+  FileBarChart,
 } from 'lucide-react';
 import { MobileInstallPage } from './pages/mobile-install';
 import { SettingsPage } from './pages/settings';
@@ -25,6 +26,7 @@ import { CollectionCaseDetailPage } from './pages/collection-case-detail';
 import { KycManualReviewPage } from './pages/kyc-manual-review';
 import { AccountManagerDashboardPage } from './pages/account-manager-dashboard';
 import { CampaignAnalysisPage } from './pages/campaign-analysis';
+import { CfoReportsPage } from './pages/cfo-reports';
 import { usePlatform } from './hooks/use-platform';
 import { deriveDefaultPage } from './lib/default-page';
 import type { ActivePage } from './lib/default-page';
@@ -191,6 +193,9 @@ function App() {
     if (activePage === 'campaign-analysis') {
       return <CampaignAnalysisPage />;
     }
+    if (activePage === 'cfo-reports') {
+      return <CfoReportsPage />;
+    }
     return <SettingsPage />;
   }
 
@@ -295,6 +300,20 @@ function App() {
                 }`}
               >
                 <TrendingUp size={20} strokeWidth={2.5} />
+              </button>
+            )}
+            {(user?.isCfo || user?.isSuperadmin) && (
+              <button
+                title="Reports"
+                data-testid="nav-cfo-reports"
+                onClick={() => setActivePage('cfo-reports')}
+                className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                  activePage === 'cfo-reports'
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+                }`}
+              >
+                <FileBarChart size={20} strokeWidth={2.5} />
               </button>
             )}
             {(user?.role === 'finance_controller' || user?.isSuperadmin) && (
@@ -442,6 +461,18 @@ function App() {
             }`}
           >
             <TrendingUp size={20} strokeWidth={2.5} />
+          </button>
+        )}
+        {(user?.isCfo || user?.isSuperadmin) && (
+          <button
+            title="Reports"
+            data-testid="nav-cfo-reports-mobile"
+            onClick={() => setActivePage('cfo-reports')}
+            className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+              activePage === 'cfo-reports' ? 'text-indigo-600' : 'text-zinc-400'
+            }`}
+          >
+            <FileBarChart size={20} strokeWidth={2.5} />
           </button>
         )}
         {(user?.role === 'finance_controller' || user?.isSuperadmin) && (
