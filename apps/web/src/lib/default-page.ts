@@ -13,7 +13,6 @@ export type ActivePage =
   | 'settings'
   | 'cfo-portfolio'
   | 'cfo-dashboard'
-  | 'wiki'
   | 'collection-queue'
   | 'kyc-review'
   | 'account-manager-dashboard'

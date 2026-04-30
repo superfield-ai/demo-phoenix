@@ -46,20 +46,12 @@ import { handleIngestionRequest } from './api/ingestion';
 import { handleCorpusChunksRequest, registerCorpusChunkEntityType } from './api/corpus-chunks';
 import { handleCampaignAnalysisRequest } from './api/campaign-analysis';
 import { handleWorkerTokensRequest } from './api/worker-tokens';
-import { handleInternalWikiVersionsRequest } from './api/internal-wiki-versions';
-import { handleInternalRelationsRequest } from './api/internal-relations';
 import { handleDeepcleanRequest } from './api/deepclean';
-import { handleWikiRequest } from './api/wiki';
-import { handleWikiPageViewRequest } from './api/wiki-page-view';
-import { handleWikiPendingDraftsRequest } from './api/wiki-pending-drafts';
 import {
   handleTranscriptIngestionRequest,
   registerTranscriptEntityType,
 } from './api/transcript-ingestion';
 import { handleTranscriptionRequest } from './api/transcription';
-import { handleAnnotationsRequest } from './api/annotations';
-import { handleAnnotationThreadsRequest } from './api/annotation-threads';
-import { handleWikiDraftReviewRequest } from './api/wiki-draft-review';
 import { handleBdmCampaignRequest } from './api/bdm-campaign';
 import { handleCampaignSummaryRequest } from './api/campaign-summary';
 import { handleComplianceRequest } from './api/compliance';
@@ -322,69 +314,10 @@ export default {
     }
 
     // Deepclean on-demand autolearn endpoint (issue #41).
-    // POST /api/deepclean — operator-only trigger for a full-ground-truth wiki rebuild.
+    // POST /api/deepclean — operator-only trigger for a full-ground-truth autolearn rebuild.
     if (url.pathname.startsWith('/api/deepclean')) {
       const deepcleanRes = await handleDeepcleanRequest(req, url, appState);
       if (deepcleanRes) return withTrace(deepcleanRes);
-    }
-
-    // Draft review + publication gate (issue #66).
-    // GET  /api/wiki/drafts/:id           — fetch draft with diff and materiality
-    // POST /api/wiki/drafts/:id/approve   — publish the draft (approver only)
-    // POST /api/wiki/drafts/:id/reject    — close the draft  (approver only)
-    // Must be checked before the generic /api/wiki handler.
-    if (url.pathname.startsWith('/api/wiki/drafts')) {
-      const draftReviewRes = await handleWikiDraftReviewRequest(req, url, appState);
-      if (draftReviewRes) return withTrace(draftReviewRes);
-    }
-
-    // Pending-drafts badge count for approvers (issue #48).
-    // GET /api/wiki/pending-drafts?customer_id=<id>
-    // Must be checked before the generic /api/wiki handler to avoid prefix collision.
-    if (url.pathname === '/api/wiki/pending-drafts') {
-      const pendingRes = await handleWikiPendingDraftsRequest(req, url, appState);
-      if (pendingRes) return withTrace(pendingRes);
-    }
-
-    // Wiki draft management + claim-citation coverage check (issue #43).
-    // POST   /api/wiki/versions           — create draft, run coverage check
-    // GET    /api/wiki/versions/:id       — fetch draft by ID
-    // POST   /api/wiki/versions/:id/publish — publish (blocked for P1 drafts)
-    if (url.pathname.startsWith('/api/wiki')) {
-      const wikiRes = await handleWikiRequest(req, url, appState);
-      if (wikiRes) return withTrace(wikiRes);
-    }
-
-    // Annotation threads — inline anchored comment threads on wiki page versions (issue #63).
-    // GET    /api/wiki/pages/:cId/versions/:vId/annotations            — list threads
-    // POST   /api/wiki/pages/:cId/versions/:vId/annotations            — create thread
-    // POST   /api/wiki/pages/:cId/versions/:vId/annotations/:tId/replies — post reply
-    // PATCH  /api/wiki/pages/:cId/versions/:vId/annotations/:tId      — resolve/unresolve
-    // Must be checked BEFORE the generic /api/wiki/pages handler.
-    if (url.pathname.includes('/annotations')) {
-      const annotationRes = await handleAnnotationThreadsRequest(req, url, appState);
-      if (annotationRes) return withTrace(annotationRes);
-    }
-
-    // Read-only wiki page view + version picker + citation hover (issue #45).
-    // GET  /api/wiki/pages/:customerId                                  — list versions
-    // GET  /api/wiki/pages/:customerId/versions/:versionId             — fetch single version
-    // GET  /api/wiki/pages/:customerId/versions/:versionId/citations/:t — resolve citation
-    // Scout stub: all routes return 501 Not Implemented (Phase 4 follow-on).
-    if (url.pathname.startsWith('/api/wiki/pages')) {
-      const wikiPageRes = await handleWikiPageViewRequest(req, url, appState);
-      if (wikiPageRes) return withTrace(wikiPageRes);
-    }
-
-    // Annotation thread API — Phase 6 scout stub (issue #62).
-    // POST   /api/annotations                   — open a new annotation thread
-    // GET    /api/annotations/:id               — fetch an annotation thread
-    // POST   /api/annotations/:id/accept        — accept agent reply, publish new WikiPageVersion
-    // POST   /api/annotations/:id/reject        — reject agent reply, no version change
-    // Scout stub: all routes return 501 Not Implemented (Phase 6 follow-on).
-    if (url.pathname.startsWith('/api/annotations')) {
-      const annotationsRes = await handleAnnotationsRequest(req, url, appState);
-      if (annotationsRes) return withTrace(annotationsRes);
     }
 
     if (url.pathname.startsWith('/api/reidentification')) {
@@ -444,20 +377,6 @@ export default {
     if (url.pathname.startsWith('/internal/worker/tokens')) {
       const workerTokenRes = await handleWorkerTokensRequest(req, url, appState);
       if (workerTokenRes) return withTrace(workerTokenRes);
-    }
-
-    // Internal worker wiki write endpoint — Bearer wiki-write token auth (issue #39).
-    // POST /internal/wiki/versions — autolearn worker writes draft WikiPageVersion.
-    if (url.pathname.startsWith('/internal/wiki/')) {
-      const internalWikiRes = await handleInternalWikiVersionsRequest(req, url, appState);
-      if (internalWikiRes) return withTrace(internalWikiRes);
-    }
-
-    // Internal worker relation write endpoint — Bearer wiki-write token auth (issue #72).
-    // POST /internal/relations — autolearn worker writes discussed_in relations.
-    if (url.pathname === '/internal/relations') {
-      const internalRelRes = await handleInternalRelationsRequest(req, url, appState);
-      if (internalRelRes) return withTrace(internalRelRes);
     }
 
     // Campaign summary endpoint — Phase 7 BDM campaign analysis (issue #75).

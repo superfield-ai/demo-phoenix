@@ -101,7 +101,7 @@ describe('NetworkPolicy — egress rules (WORKER-C-006, WORKER-C-024)', () => {
     expect(policy).toContain('- Egress');
   });
 
-  test('Egress allows port 80 to api-server (task claim and wiki writes)', () => {
+  test('Egress allows port 80 to api-server (task claim and relation writes)', () => {
     const content = readFileSync(MANIFEST_PATH, 'utf-8');
     const docs = splitYamlDocuments(content);
     const [policy] = documentsOfKind(docs, 'NetworkPolicy');
