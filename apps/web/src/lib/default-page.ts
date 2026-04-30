@@ -21,16 +21,23 @@ export type ActivePage =
 /**
  * Derive the default landing page from role and access flags.
  * Each persona lands on the page most relevant to their job.
+ *
+ * Only sales_rep and superadmin land on the pipeline page.
+ * All other roles land on their role-specific page (or settings as a safe
+ * fallback for unknown roles).
  */
 export function deriveDefaultPage(
   role: string | null | undefined,
   isCfo: boolean | undefined,
   isBdm: boolean | undefined,
+  isSuperadmin?: boolean | undefined,
 ): ActivePage {
   if (isCfo || role === 'cfo') return 'cfo-portfolio';
   if (isBdm || role === 'bdm') return 'campaign-analysis';
   if (role === 'collections_agent') return 'collection-queue';
   if (role === 'finance_controller') return 'cfo-dashboard';
   if (role === 'account_manager') return 'account-manager-dashboard';
-  return 'pipeline';
+  if (role === 'sales_rep' || isSuperadmin) return 'pipeline';
+  // Unknown roles fall back to settings — never the pipeline page.
+  return 'settings';
 }

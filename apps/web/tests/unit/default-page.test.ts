@@ -43,12 +43,16 @@ describe('deriveDefaultPage', () => {
     expect(deriveDefaultPage('sales_rep', false, false)).toBe('pipeline');
   });
 
-  it('returns pipeline for unknown role', () => {
-    expect(deriveDefaultPage('unknown_role', false, false)).toBe('pipeline');
+  it('returns pipeline when isSuperadmin=true regardless of role', () => {
+    expect(deriveDefaultPage(null, false, false, true)).toBe('pipeline');
   });
 
-  it('returns pipeline when role is null and no flags', () => {
-    expect(deriveDefaultPage(null, false, false)).toBe('pipeline');
+  it('returns settings for unknown role (never pipeline)', () => {
+    expect(deriveDefaultPage('unknown_role', false, false)).toBe('settings');
+  });
+
+  it('returns settings when role is null and no flags', () => {
+    expect(deriveDefaultPage(null, false, false)).toBe('settings');
   });
 
   it('isCfo takes precedence over isBdm', () => {
