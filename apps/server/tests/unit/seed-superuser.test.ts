@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { _resetSecretsForTest, _seedSecretForTest } from '../../src/secrets/index';
 import { seedSuperuser, type SeedSuperuserOptions } from '../../src/seed/superuser';
+import * as coreLogger from 'core';
 
 type MockSql = SeedSuperuserOptions['sql'];
 
@@ -80,20 +81,24 @@ describe('seedSuperuser()', () => {
   test('skips seeding when SUPERUSER_EMAIL is not set', async () => {
     const sql = makeSql({ selectResult: [] });
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const logSpy = vi.spyOn(coreLogger, 'log').mockImplementation(() => {});
     await seedSuperuser({ sql });
 
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('SUPERUSER_EMAIL is not set'));
+    expect(logSpy).toHaveBeenCalledWith(
+      'warn',
+      expect.stringContaining('SUPERUSER_EMAIL is not set'),
+    );
   });
 
   test('skips seeding when neither password nor mnemonic is set', async () => {
     const sql = makeSql({ selectResult: [] });
     _seedSecretForTest('SUPERUSER_EMAIL', 'admin@example.com');
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const logSpy = vi.spyOn(coreLogger, 'log').mockImplementation(() => {});
     await seedSuperuser({ sql });
 
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(logSpy).toHaveBeenCalledWith(
+      'warn',
       expect.stringContaining('Neither SUPERUSER_PASSWORD nor SUPERUSER_MNEMONIC'),
     );
   });

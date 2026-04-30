@@ -39,6 +39,7 @@ vi.mock('croner', () => {
 
 // Mock db/task-queue
 vi.mock('db/task-queue', () => ({
+  DLQ_ALERT_THRESHOLD: 10,
   enqueueTask: vi.fn(async () => ({
     id: 'mock-task-id',
     idempotency_key: 'mock-key',
