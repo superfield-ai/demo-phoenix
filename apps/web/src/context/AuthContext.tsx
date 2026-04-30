@@ -62,10 +62,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // fetchWithAuth is created once and delegates to logoutRef.current so it
   // always calls the current logout without recreating the closure.
+  // The empty dep array is intentional — logoutRef is a stable ref object and
+  // logoutRef.current is kept up to date by the sync effect that follows.
   const fetchWithAuth = React.useMemo(
     () => makeFetchWithAuth(() => logoutRef.current()),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [], // stable ref — intentionally empty dep array
   );
 
   const logout = React.useCallback(async () => {
