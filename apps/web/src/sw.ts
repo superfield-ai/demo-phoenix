@@ -37,7 +37,11 @@
 /// <reference lib="webworker" />
 declare const self: ServiceWorkerGlobalScope;
 
-const CACHE_VERSION = 'v1';
+// Injected at build time by vite.config.ts define.__SW_CACHE_VERSION__.
+// Contains the git short-hash of the current commit so each deploy gets a
+// unique cache name, causing the activate handler to delete stale caches.
+declare const __SW_CACHE_VERSION__: string;
+const CACHE_VERSION = __SW_CACHE_VERSION__;
 const CACHE_NAME = `superfield-shell-${CACHE_VERSION}`;
 
 /**
