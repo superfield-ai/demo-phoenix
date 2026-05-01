@@ -32,8 +32,20 @@ type FixturePasskeyCredential = {
 
 type LeadsQueueBody = { leads: unknown[]; pending_kyc_count: number };
 
+type AuthMeBody = {
+  id: string;
+  username?: string;
+  role?: string | null;
+  isCfo?: boolean;
+  isBdm?: boolean;
+  isSuperadmin?: boolean;
+  onboarding_completed?: boolean;
+};
+
 type FixtureState = {
   tasks?: FixtureTask[];
+  /** Override the /api/auth/me response for testing role-specific landing pages. */
+  authMe?: AuthMeBody;
   /** OAuth status response */
   oauthStatus?: OAuthStatus | FixtureResponse<OAuthStatus>;
   /** OAuth init response */
@@ -140,9 +152,16 @@ export async function handleFixtureRequest(req: Request, statePath: string): Pro
     return json({ leads: [] });
   }
 
-  // Auth session endpoint — returns a minimal user object so AuthContext loads cleanly.
+  // Auth session endpoint — returns the fixture authMe state when set,
+  // otherwise a default sales_rep user so AuthContext loads cleanly.
   if (req.method === 'GET' && url.pathname === '/api/auth/me') {
-    return json({ id: 'fixture-user', role: 'sales_rep', email: 'fixture@example.com' });
+    const defaultUser: AuthMeBody = {
+      id: 'fixture-user',
+      username: 'fixture@example.com',
+      role: 'sales_rep',
+      onboarding_completed: true,
+    };
+    return json({ user: state.authMe ?? defaultUser });
   }
 
   // OAuth status endpoint

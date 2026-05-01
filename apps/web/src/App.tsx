@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './components/Login';
 import {
@@ -113,6 +113,20 @@ function App() {
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [showWalkthrough, setShowWalkthrough] = useState<boolean | null>(null);
 
+  // Track whether activePage has been seeded from a resolved user.
+  // On first mount user is null (auth not yet resolved), so useState above
+  // seeds activePage as 'settings'. This ref ensures we re-sync exactly once
+  // when the user first transitions from null to a real user object.
+  const userResolvedRef = useRef(false);
+
+  // Sync activePage to the role-correct default the first time user resolves.
+  useEffect(() => {
+    if (!user) return;
+    if (userResolvedRef.current) return;
+    userResolvedRef.current = true;
+    setActivePage(deriveDefaultPage(user.role, user.isCfo, user.isBdm, user.isSuperadmin));
+  }, [user]);
+
   // Determine whether to show the walkthrough once we have user data
   React.useEffect(() => {
     if (!user) return;
@@ -143,23 +157,17 @@ function App() {
 
   const walkthroughSteps = getWalkthroughSteps(user.role, user.isCfo, user.isBdm);
 
-  // Route guard: redirect non-pipeline roles away from the pipeline page.
-  // This handles direct URL navigation or stale state from a previous session.
-  React.useEffect(() => {
-    if (activePage === 'pipeline' && !isPipelineRole) {
-      setActivePage(defaultPage === 'pipeline' ? 'settings' : defaultPage);
-    }
-  }, [activePage, isPipelineRole, defaultPage]);
-
   function renderMain() {
     if (activePage === 'pipeline') {
       if (!isPipelineRole) {
-        // Render nothing while the redirect effect fires.
-        return null;
+        return <SettingsPage />;
       }
       return <PipelineBoardPage />;
     }
     if (activePage === 'leads') {
+      if (!isPipelineRole) {
+        return <SettingsPage />;
+      }
       if (selectedLeadId) {
         return (
           <LeadDetailPage prospectId={selectedLeadId} onBack={() => setSelectedLeadId(null)} />
@@ -168,12 +176,21 @@ function App() {
       return <LeadQueuePage onSelectLead={(id) => setSelectedLeadId(id)} />;
     }
     if (activePage === 'cfo-portfolio') {
+      if (!user?.isCfo && !user?.isSuperadmin) {
+        return <SettingsPage />;
+      }
       return <CfoPortfolioPage />;
     }
     if (activePage === 'cfo-dashboard') {
+      if (user?.role !== 'finance_controller' && !user?.isSuperadmin) {
+        return <SettingsPage />;
+      }
       return <CfoDashboardPage />;
     }
     if (activePage === 'collection-queue') {
+      if (user?.role !== 'collections_agent' && !user?.isSuperadmin) {
+        return <SettingsPage />;
+      }
       if (selectedCaseId) {
         return (
           <CollectionCaseDetailPage
@@ -185,15 +202,27 @@ function App() {
       return <CollectionQueuePage onSelectCase={(id) => setSelectedCaseId(id)} />;
     }
     if (activePage === 'kyc-review') {
+      if (user?.role === 'sales_rep') {
+        return <SettingsPage />;
+      }
       return <KycManualReviewPage />;
     }
     if (activePage === 'account-manager-dashboard') {
+      if (user?.role !== 'account_manager' && !user?.isSuperadmin) {
+        return <SettingsPage />;
+      }
       return <AccountManagerDashboardPage />;
     }
     if (activePage === 'campaign-analysis') {
+      if (!user?.isBdm && !user?.isSuperadmin) {
+        return <SettingsPage />;
+      }
       return <CampaignAnalysisPage />;
     }
     if (activePage === 'cfo-reports') {
+      if (!user?.isCfo && !user?.isSuperadmin) {
+        return <SettingsPage />;
+      }
       return <CfoReportsPage />;
     }
     return <SettingsPage />;
@@ -228,16 +257,19 @@ function App() {
                 <KanbanSquare size={20} strokeWidth={2.5} />
               </button>
             )}
-            <button
-              onClick={() => {
-                setActivePage('leads');
-                setSelectedLeadId(null);
-              }}
-              className={`p-3 rounded-xl flex items-center justify-center transition-all ${activePage === 'leads' ? 'bg-indigo-50 text-indigo-600' : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-700'}`}
-              title="Lead queue"
-            >
-              <Users size={20} strokeWidth={2.5} />
-            </button>
+            {isPipelineRole && (
+              <button
+                onClick={() => {
+                  setActivePage('leads');
+                  setSelectedLeadId(null);
+                }}
+                className={`p-3 rounded-xl flex items-center justify-center transition-all ${activePage === 'leads' ? 'bg-indigo-50 text-indigo-600' : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-700'}`}
+                title="Lead queue"
+                data-testid="nav-leads"
+              >
+                <Users size={20} strokeWidth={2.5} />
+              </button>
+            )}
             <NotificationBell
               onSelectLead={(prospectId) => {
                 setActivePage('leads');
@@ -401,18 +433,21 @@ function App() {
             <KanbanSquare size={20} strokeWidth={2.5} />
           </button>
         )}
-        <button
-          title="Lead queue"
-          onClick={() => {
-            setActivePage('leads');
-            setSelectedLeadId(null);
-          }}
-          className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
-            activePage === 'leads' ? 'text-indigo-600' : 'text-zinc-400'
-          }`}
-        >
-          <Users size={20} strokeWidth={2.5} />
-        </button>
+        {isPipelineRole && (
+          <button
+            title="Lead queue"
+            data-testid="nav-leads-mobile"
+            onClick={() => {
+              setActivePage('leads');
+              setSelectedLeadId(null);
+            }}
+            className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl min-w-[44px] min-h-[44px] transition-all ${
+              activePage === 'leads' ? 'text-indigo-600' : 'text-zinc-400'
+            }`}
+          >
+            <Users size={20} strokeWidth={2.5} />
+          </button>
+        )}
         {(user?.role === 'collections_agent' || user?.isSuperadmin) && (
           <button
             title="Case Queue"

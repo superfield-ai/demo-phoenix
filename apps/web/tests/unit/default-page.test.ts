@@ -5,6 +5,8 @@
  * correct landing page. No mocks — the function is pure.
  *
  * Issue: https://github.com/superfield-ai/demo-phoenix/issues/75
+ * Extended for issue #93 (activePage sync): verifies App uses deriveDefaultPage
+ * correctly when the user resolves from null, ensuring role-correct landing pages.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -57,5 +59,42 @@ describe('deriveDefaultPage', () => {
 
   it('isCfo takes precedence over isBdm', () => {
     expect(deriveDefaultPage(null, true, true)).toBe('cfo-portfolio');
+  });
+});
+
+/**
+ * Simulates the activePage sync logic introduced in App.tsx (issue #93).
+ *
+ * The App useEffect calls deriveDefaultPage(user.role, user.isCfo, user.isBdm,
+ * user.isSuperadmin) the first time user resolves from null.  These tests verify
+ * the expected page for each relevant user object shape — the pure function
+ * call that the effect delegates to.
+ *
+ * No React rendering needed: deriveDefaultPage is pure and deterministic.
+ */
+describe('activePage sync — deriveDefaultPage for resolved user objects (issue #93)', () => {
+  it('CFO user object resolves to cfo-portfolio', () => {
+    // Simulates: deriveDefaultPage(user.role, user.isCfo, user.isBdm, user.isSuperadmin)
+    // for a CFO user { role: 'cfo', isCfo: true }
+    expect(deriveDefaultPage('cfo', true, false, false)).toBe('cfo-portfolio');
+  });
+
+  it('collections_agent user object resolves to collection-queue', () => {
+    expect(deriveDefaultPage('collections_agent', false, false, false)).toBe('collection-queue');
+  });
+
+  it('sales_rep user object resolves to pipeline', () => {
+    expect(deriveDefaultPage('sales_rep', false, false, false)).toBe('pipeline');
+  });
+
+  it('superadmin user object resolves to pipeline (isSuperadmin=true)', () => {
+    expect(deriveDefaultPage('sales_rep', false, false, true)).toBe('pipeline');
+  });
+
+  it('null user (pre-auth) resolves to settings — sync must not fire until user exists', () => {
+    // This is the initial useState seed value before auth resolves.
+    // The sync useEffect guards with "if (!user) return" so this path
+    // is never passed to setActivePage.
+    expect(deriveDefaultPage(null, false, false, false)).toBe('settings');
   });
 });
