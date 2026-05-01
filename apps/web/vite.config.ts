@@ -1,8 +1,21 @@
+import { execSync } from 'child_process';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
 import tailwindConfig from './tailwind.config';
+
+// Derive a unique cache-busting version from the current git commit.
+// Falls back to a millisecond timestamp if git is unavailable (CI fresh clone, etc.).
+function swCacheVersion(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['pipe', 'pipe', 'pipe'] })
+      .toString()
+      .trim();
+  } catch {
+    return Date.now().toString(36);
+  }
+}
 
 export function getApiPort(env: NodeJS.ProcessEnv = process.env): number {
   const rawPort = env.PORT ?? '31415';
@@ -23,6 +36,9 @@ export function createProxy(env: NodeJS.ProcessEnv = process.env) {
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __SW_CACHE_VERSION__: JSON.stringify(swCacheVersion()),
+  },
   test: {
     exclude: ['tests/component/**'],
   },
